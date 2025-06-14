@@ -9,7 +9,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 from flask_sqlalchemy import SQLAlchemy
-
+import datetime
 
 app = Flask(__name__)
 
@@ -18,6 +18,19 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Victhequick24$@localhost/intellectual_diversity_engine'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+
+# database model definition
+class Article(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    url = db.Column(db.String(500), unique=True, nullable=False)
+    title = db.Column(db.String(500), nullable=False)
+    author = db.Column(db.String(200))
+    publish_date = db.Column(db.DateTime)
+    article_text = db.Column(db.Text, nullable=False)
+    retrieved_at = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
+
+    def __repr__(self):
+        return f'<Article {self.title}>'
 
 @app.route('/')
 def index():
