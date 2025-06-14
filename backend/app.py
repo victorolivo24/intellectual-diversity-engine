@@ -1,12 +1,6 @@
 from flask import Flask, request, jsonify
-
-# We no longer need newspaper3k
-# import newspaper
-
-# We need BeautifulSoup
 from bs4 import BeautifulSoup
 
-# Selenium imports remain the same
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -15,6 +9,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return "Hello, World! The Echo Escape server is running."
 
 @app.route('/analyze', methods=['POST'])
 def analyze_url():
@@ -44,24 +42,47 @@ def analyze_url():
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "h1")))
 
         html = driver.page_source
-
-        # --- THE NEW, WORKING LOGIC ---
-        # 1. Parse the HTML we got from Selenium with Beautiful Soup
+        
+        # --- NEW EXTRACTION LOGIC ---
         soup = BeautifulSoup(html, 'html.parser')
         
-        # 2. Find the <title> tag and get its text. It's that simple.
-        title = soup.find('title').get_text()
+        # Extract Title (as before)
+        title_tag = soup.find('title')
+        title = title_tag.get_text() if title_tag else "No title found"
         
-        if not title:
-             raise ValueError("Beautiful Soup failed to extract a title.")
-        # ----------------------------
+        # Extract Author from meta tag
+        author_tag = soup.find('meta', property='article:author')
+        author = author_tag['content'] if author_tag else "No author found"
 
-        print(f"Extracted Title: {title}")
+        # Extract Published Date from meta tag
+        date_tag = soup.find('meta', property='article:published_time')
+        publish_date = date_tag['content'] if date_tag else "No publish date found"
 
+        # --- NEW, MORE ROBUST TEXT EXTRACTION ---
+        article_text = "No article text found" # Default value
+        main_content = soup.find('main') # Find the <main> content block of the page
+
+        if main_content:
+            # Find all the paragraph <p> tags within the main content
+            paragraphs = main_content.find_all('p')
+            # Join the text from all paragraphs together with a double newline
+            article_text = '\n\n'.join([p.get_text(strip=True) for p in paragraphs])
+        
+        if not article_text:
+            # If we still didn't find text, raise an error so we know.
+            raise ValueError("Selector failed to find article text paragraphs.")
+        # ----------------------------------------
+
+        print(f"Successfully extracted content for: {title}")
+
+        # Return all the new data in our JSON response
         return jsonify({
             "status": "success",
             "received_url": url,
-            "title": title
+            "title": title,
+            "author": author,
+            "publish_date": publish_date,
+            "article_text": article_text
         })
 
     except Exception as e:
