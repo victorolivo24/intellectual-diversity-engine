@@ -8,7 +8,16 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+from flask_sqlalchemy import SQLAlchemy
+
+
 app = Flask(__name__)
+
+# --- DATABASE CONFIGURATION ---
+# Make sure to replace YOUR_PASSWORD with the password you set during the PostgreSQL installation.
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Victhequick24$@localhost/intellectual_diversity_engine'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
 @app.route('/')
 def index():
