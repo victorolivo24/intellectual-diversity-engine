@@ -34,15 +34,22 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# --- NLTK Setup ---
+# --- NLTK Setup with Custom Stopwords ---
 try:
     sid = SentimentIntensityAnalyzer()
-    stop_words = set(stopwords.words('english'))
+    # Load the default stopwords
+    default_stopwords = set(stopwords.words('english'))
+    # Create a custom list of words to exclude from keywords
+    custom_stopwords = {'said', 'also', 'would', 'could', 'like', 'one', 'two', 'us', 'new', 'get', 'year', 'told', 'ap'}
+    # Combine the lists for a more powerful filter
+    stop_words = default_stopwords.union(custom_stopwords)
 except LookupError:
     nltk.download('vader_lexicon', quiet=True)
     nltk.download('stopwords', quiet=True)
     sid = SentimentIntensityAnalyzer()
-    stop_words = set(stopwords.words('english'))
+    default_stopwords = set(stopwords.words('english'))
+    custom_stopwords = {'said', 'also', 'would', 'could', 'like', 'one', 'two', 'us', 'new', 'get', 'year', 'told', 'ap'}
+    stop_words = default_stopwords.union(custom_stopwords)
 
 
 # --- Association Table for User's Reading List ---
@@ -55,9 +62,7 @@ reading_list = db.Table('reading_list',
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    # --- THIS LINE IS THE FIX ---
     password_hash = db.Column(db.String(256), nullable=False)
-    # ----------------------------
     articles = db.relationship('Article', secondary=reading_list, lazy='subquery',
         backref=db.backref('users', lazy=True))
 
@@ -136,11 +141,6 @@ def register():
 
 @app.route('/analyze', methods=['POST'])
 def analyze_url():
-    # ... (full analyze logic) ...
-    pass
-
-# This is a cleaner way to handle the function assignment for Flask
-def full_analyze_url():
     data = request.get_json()
     if not data or 'url' not in data: return jsonify({"status": "error", "message": "Missing 'url' in request"}), 400
     url = data['url']
@@ -160,6 +160,7 @@ def full_analyze_url():
         html = driver.page_source
         
         soup = BeautifulSoup(html, 'html.parser')
+        
         title = soup.find('title').get_text(strip=True) if soup.find('title') else "No Title Found"
         author, publish_date = "No Author Found", None
         meta_author = soup.find('meta', property='article:author');
@@ -197,9 +198,6 @@ def full_analyze_url():
     finally:
         if driver: driver.quit()
 
-app.view_functions['analyze_url'] = full_analyze_url
-
-# Final app execution
 if __name__ == '__main__':
     with app.app_context():
         db.create_all() 
