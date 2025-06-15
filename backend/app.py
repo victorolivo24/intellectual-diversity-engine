@@ -11,12 +11,13 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import os
 from dotenv import load_dotenv
+from flask_cors import CORS
 
 load_dotenv()
 
 # 2. Create the Flask app instance. This MUST happen after imports and before routes.
 app = Flask(__name__)
-
+CORS(app)
 # 3. Configure the app.
 # IMPORTANT: Replace YOUR_PASSWORD with the password you set for the 'postgres' user.
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
