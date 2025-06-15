@@ -13,13 +13,12 @@ import os
 from dotenv import load_dotenv
 from flask_cors import CORS
 
+# 2. Load environment variables and create the Flask app instance.
 load_dotenv()
-
-# 2. Create the Flask app instance. This MUST happen after imports and before routes.
 app = Flask(__name__)
 CORS(app)
+
 # 3. Configure the app.
-# IMPORTANT: Replace YOUR_PASSWORD with the password you set for the 'postgres' user.
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
@@ -37,7 +36,7 @@ class Article(db.Model):
     def __repr__(self):
         return f'<Article {self.title}>'
 
-# 5. Define your routes. Now it's safe to use @app.route because 'app' exists.
+# 5. Define your routes.
 @app.route('/')
 def index():
     return "The Echo Escape server is running."
@@ -50,7 +49,6 @@ def analyze_url():
 
     url = data['url']
     
-    # Check if the article already exists in the database
     existing_article = Article.query.filter_by(url=url).first()
     if existing_article:
         print(f"Article already in DB: {existing_article.title}")
@@ -60,7 +58,8 @@ def analyze_url():
             "data": {
                 "title": existing_article.title,
                 "author": existing_article.author,
-                "publish_date": existing_article.publish_date
+                "publish_date": existing_article.publish_date,
+                "article_text": existing_article.article_text
             }
         })
 
@@ -80,36 +79,28 @@ def analyze_url():
         
         driver.get(url)
         
-        # Wait for the main headline to ensure the page is loaded
         WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR, "h1")))
-
         html = driver.page_source
         
         soup = BeautifulSoup(html, 'html.parser')
         
-        # --- PARSING WITH BEAUTIFUL SOUP ---
-        title_tag = soup.find('title')
-        title = title_tag.get_text() if title_tag else "No title found"
-        
+        title = soup.find('title').get_text()
         author_tag = soup.find('meta', property='article:author')
         author = author_tag['content'] if author_tag else "No author found"
-        
         date_tag = soup.find('meta', property='article:published_time')
         publish_date = date_tag['content'] if date_tag else None
         
-        # This uses the correct class name you found in the debug file
-        article_body_div = soup.find('div', class_='RichTextStoryBody')
+        # --- CORRECTED LINE USING THE CLASS NAME YOU FOUND ---
+        article_body_div = soup.find('div', class_='RichTextBody')
         
         article_text = "No article text found"
         if article_body_div:
             paragraphs = article_body_div.find_all('p')
             article_text = '\n\n'.join([p.get_text(strip=True) for p in paragraphs])
-        # --------------------------------
-
+        
         if not title or not article_text or article_text == "No article text found":
              raise ValueError("Failed to extract title or text from the page.")
         
-        # Save the complete, scraped article to the database
         new_article = Article(
             url=url,
             title=title,
@@ -134,14 +125,15 @@ def analyze_url():
 
     except Exception as e:
         print(f"An error occurred: {e}")
-        db.session.rollback() # Rollback the transaction on error
+        db.session.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
         
     finally:
         if driver:
             driver.quit()
 
-# 6. Run the app (this should always be at the very bottom of the file).
+# 6. Run the app
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)
-
