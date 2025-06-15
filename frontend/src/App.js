@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
-// --- STYLING OBJECT (consolidated for clarity) ---
+// --- STYLING OBJECT ---
 const styles = {
   container: { display: 'flex', justifyContent: 'center', alignItems: 'flex-start', minHeight: '100vh', backgroundColor: '#f0f2f5', padding: '20px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
   card: { width: '100%', maxWidth: '900px', backgroundColor: '#ffffff', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)', padding: '40px', boxSizing: 'border-box', marginTop: '50px' },
@@ -12,7 +12,7 @@ const styles = {
   errorText: { color: '#fa383e', textAlign: 'center', marginTop: '10px', height: '20px' },
   resultsContainer: { marginTop: '40px', borderTop: '1px solid #dddfe2', paddingTop: '30px' },
   metadataGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '15px', marginBottom: '30px' },
-  resultItem: { backgroundColor: '#f7f8fa', padding: '15px', borderRadius: '8px', fontSize: '14px', color: '#1c1e21', lineHeight: 1.5 },
+  resultItem: { backgroundColor: '#f7f8fa', padding: '15px', borderRadius: '8px', fontSize: '14px', color: '#1c1e21', lineHeight: 1.5, overflow: 'hidden' },
   sentimentBar: { borderRadius: '4px', padding: '8px 12px', color: 'white', fontWeight: 'bold', textAlign: 'center', marginTop: '8px', fontSize: '14px' },
   keywordContainer: { display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' },
   keywordTag: { backgroundColor: '#e4e6eb', color: '#333', padding: '5px 10px', borderRadius: '15px', fontSize: '13px' },
@@ -23,44 +23,51 @@ const styles = {
   authInput: { border: '1px solid #dddfe2', borderRadius: '6px', padding: '15px', fontSize: '16px', outline: 'none' },
   authButton: { border: 'none', borderRadius: '6px', backgroundColor: '#31a24c', color: 'white', padding: '15px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' },
   authToggle: { color: '#1877f2', textAlign: 'center', cursor: 'pointer', marginTop: '10px' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
+  welcomeMessage: { fontSize: '16px', color: '#606770' },
   logoutButton: { border: 'none', background: 'transparent', color: '#1877f2', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }
 };
 
 // --- Child Components ---
 
-const AuthComponent = ({ setToken }) => {
+const AuthComponent = ({ setLoggedInUser }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-
-    const endpoint = isLogin ? '/login' : '/register';
-    // For now, we'll just implement register. Login will come next.
+    setMessage('');
+    
+    // For now, we only implement registration
     if (!isLogin) {
-        try {
-            const response = await fetch(`http://127.0.0.1:5000${endpoint}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password }),
-            });
-            const data = await response.json();
-            if (data.status === 'error') {
-                setError(data.message);
-            } else {
-                alert('Registration successful! Please log in.');
-                setIsLogin(true); // Switch to login form
-            }
-        } catch (err) {
-            setError('An error occurred. Please try again.');
+      try {
+        const response = await fetch(`http://127.0.0.1:5000/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password }),
+        });
+        const data = await response.json();
+        if (data.status === 'error') {
+            setError(data.message);
+        } else {
+            setMessage('Registration successful! Please switch to Log In.');
+            setIsLogin(true);
         }
+      } catch (err) {
+        setError('An error occurred. Please try again.');
+      }
     } else {
-        // We will implement the actual login logic later
-        alert('Login functionality is not yet implemented. Please register a new user.');
+        // Placeholder for login - for now, we just set the user
+        // In a real app, this would call a /login endpoint and get a token
+        if(username) {
+            setLoggedInUser(username);
+        } else {
+            setError("Please enter a username to log in.");
+        }
     }
   };
 
@@ -72,6 +79,7 @@ const AuthComponent = ({ setToken }) => {
             <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={styles.authInput} required />
             <button type="submit" style={styles.authButton}>{isLogin ? 'Log In' : 'Register'}</button>
             {error && <p style={styles.errorText}>{error}</p>}
+            {message && <p style={{...styles.errorText, color: 'green'}}>{message}</p>}
         </form>
         <p onClick={() => setIsLogin(!isLogin)} style={styles.authToggle}>
             {isLogin ? "Don't have an account? Register" : "Already have an account? Log In"}
@@ -80,24 +88,19 @@ const AuthComponent = ({ setToken }) => {
   );
 };
 
-const AnalysisComponent = ({ token, handleLogout }) => {
-    // All of our previous App component logic is now in here
+const AnalysisComponent = ({ loggedInUser, handleLogout }) => {
     const [url, setUrl] = useState('');
     const [analysisResult, setAnalysisResult] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const handleAnalyze = async () => { /* ... analyze logic from previous step ... */ };
-    const getWordCount = (text) => text ? text.trim().split(/\s+/).length : 0;
-    
-    // Paste the full handleAnalyze function here from the previous step
-    const fullHandleAnalyze = async () => {
+    const handleAnalyze = async () => {
         if (!url) { setError('Please enter a URL.'); return; }
         setIsLoading(true); setError(''); setAnalysisResult(null);
         try {
             const response = await fetch('http://127.0.0.1:5000/analyze', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url, token }), // We'll add the token later
+                body: JSON.stringify({ url }), // We will add user info here later
             });
             const data = await response.json();
             if (!response.ok || data.status === 'error') throw new Error(data.message || 'Analysis failed');
@@ -112,20 +115,30 @@ const AnalysisComponent = ({ token, handleLogout }) => {
     return (
         <div style={styles.card}>
             <div style={styles.header}>
+              <div>
                 <h1 style={{...styles.title, textAlign: 'left', margin: 0}}>Echo Escape</h1>
-                <button onClick={handleLogout} style={styles.logoutButton}>Logout</button>
+                <p style={styles.welcomeMessage}>Welcome, {loggedInUser}!</p>
+              </div>
+              <button onClick={handleLogout} style={styles.logoutButton}>Logout</button>
             </div>
-            <p style={{...styles.subtitle, textAlign: 'left', margin: '0 0 30px 0'}}>
-              Paste an article URL to add it to your reading history.
-            </p>
+            <p style={{...styles.subtitle, textAlign: 'left', margin: '10px 0 30px 0'}}>Paste an article URL to add it to your reading history.</p>
             <div style={styles.inputContainer}>
-              <input type="text" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." style={styles.input} onKeyPress={(e) => e.key === 'Enter' && fullHandleAnalyze()} />
-              <button onClick={fullHandleAnalyze} style={styles.button} disabled={isLoading}>{isLoading ? 'Analyzing...' : 'Analyze'}</button>
+              <input type="text" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." style={styles.input} onKeyPress={(e) => e.key === 'Enter' && handleAnalyze()} />
+              <button onClick={handleAnalyze} style={styles.button} disabled={isLoading}>{isLoading ? 'Analyzing...' : 'Analyze'}</button>
             </div>
-            {error && <p style={styles.errorText}>{error}</p>}
+            <div style={{height: '20px'}}>{error && <p style={styles.errorText}>{error}</p>}</div>
             {analysisResult && analysisResult.data && (
                 <div style={styles.resultsContainer}>
-                    {/* ... The full result display JSX from the previous step goes here ... */}
+                  <div style={styles.metadataGrid}>
+                      <div style={styles.resultItem}><strong>Title:</strong> {analysisResult.data.title || 'N/A'}</div>
+                      <div style={styles.resultItem}><strong>Author:</strong> {analysisResult.data.author || 'N/A'}</div>
+                      <div style={styles.resultItem}><SentimentIndicator score={analysisResult.data.sentiment || 0} /></div>
+                      <div style={styles.resultItem}><KeywordTags keywords={analysisResult.data.keywords || []} /></div>
+                  </div>
+                  <div style={styles.articleTextContainer}>
+                      <h3 style={styles.articleTitle}>Article Text</h3>
+                      <div style={styles.articleText}>{analysisResult.data.article_text ? analysisResult.data.article_text.split('\n\n').map((p, i) => <p key={i} style={{marginBottom: '1em'}}>{p}</p>) : "No text extracted."}</div>
+                  </div>
                 </div>
             )}
         </div>
@@ -145,18 +158,31 @@ const KeywordTags = ({ keywords }) => (
 
 // --- Main App Component ---
 function App() {
-  const [token, setToken] = useState(null);
+  const [loggedInUser, setLoggedInUser] = useState(null);
+
+  useEffect(() => {
+    const user = sessionStorage.getItem('loggedInUser');
+    if (user) {
+      setLoggedInUser(user);
+    }
+  }, []);
 
   const handleLogout = () => {
-    setToken(null);
+    sessionStorage.removeItem('loggedInUser');
+    setLoggedInUser(null);
   };
+
+  const handleLogin = (username) => {
+    sessionStorage.setItem('loggedInUser', username);
+    setLoggedInUser(username);
+  }
 
   return (
     <div style={styles.container}>
-      {!token ? (
-        <AuthComponent setToken={setToken} />
+      {!loggedInUser ? (
+        <AuthComponent setLoggedInUser={handleLogin} />
       ) : (
-        <AnalysisComponent token={token} handleLogout={handleLogout} />
+        <AnalysisComponent loggedInUser={loggedInUser} handleLogout={handleLogout} />
       )}
     </div>
   );
