@@ -30,7 +30,7 @@ const styles = {
 
 // --- Child Components ---
 
-const AuthComponent = ({ setLoggedInUser }) => {
+const AuthComponent = ({ setAuthInfo }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -42,32 +42,28 @@ const AuthComponent = ({ setLoggedInUser }) => {
     setError('');
     setMessage('');
     
-    // For now, we only implement registration
-    if (!isLogin) {
-      try {
-        const response = await fetch(`http://127.0.0.1:5000/register`, {
+    const endpoint = isLogin ? '/login' : '/register';
+    const body = JSON.stringify({ username, password });
+
+    try {
+        const response = await fetch(`http://127.0.0.1:5000${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password }),
+            body: body,
         });
         const data = await response.json();
-        if (data.status === 'error') {
-            setError(data.message);
+        if (!response.ok) {
+            throw new Error(data.message || "An error occurred.");
+        }
+
+        if(isLogin) {
+            setAuthInfo({ token: data.token, username: data.username });
         } else {
-            setMessage('Registration successful! Please switch to Log In.');
+            setMessage('Registration successful! Please log in.');
             setIsLogin(true);
         }
-      } catch (err) {
-        setError('An error occurred. Please try again.');
-      }
-    } else {
-        // Placeholder for login - for now, we just set the user
-        // In a real app, this would call a /login endpoint and get a token
-        if(username) {
-            setLoggedInUser(username);
-        } else {
-            setError("Please enter a username to log in.");
-        }
+    } catch (err) {
+        setError(err.message);
     }
   };
 
@@ -78,17 +74,19 @@ const AuthComponent = ({ setLoggedInUser }) => {
             <input type="text" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} style={styles.authInput} required />
             <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={styles.authInput} required />
             <button type="submit" style={styles.authButton}>{isLogin ? 'Log In' : 'Register'}</button>
-            {error && <p style={styles.errorText}>{error}</p>}
-            {message && <p style={{...styles.errorText, color: 'green'}}>{message}</p>}
+            <div style={{height: '20px', textAlign: 'center'}}>
+              {error && <p style={styles.errorText}>{error}</p>}
+              {message && <p style={{...styles.errorText, color: 'green'}}>{message}</p>}
+            </div>
         </form>
-        <p onClick={() => setIsLogin(!isLogin)} style={styles.authToggle}>
+        <p onClick={() => {setIsLogin(!isLogin); setError(''); setMessage('');}} style={styles.authToggle}>
             {isLogin ? "Don't have an account? Register" : "Already have an account? Log In"}
         </p>
     </div>
   );
 };
 
-const AnalysisComponent = ({ loggedInUser, handleLogout }) => {
+const AnalysisComponent = ({ authInfo, handleLogout }) => {
     const [url, setUrl] = useState('');
     const [analysisResult, setAnalysisResult] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -99,8 +97,12 @@ const AnalysisComponent = ({ loggedInUser, handleLogout }) => {
         setIsLoading(true); setError(''); setAnalysisResult(null);
         try {
             const response = await fetch('http://127.0.0.1:5000/analyze', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url }), // We will add user info here later
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-access-token': authInfo.token // Send the token here
+                },
+                body: JSON.stringify({ url }),
             });
             const data = await response.json();
             if (!response.ok || data.status === 'error') throw new Error(data.message || 'Analysis failed');
@@ -117,7 +119,7 @@ const AnalysisComponent = ({ loggedInUser, handleLogout }) => {
             <div style={styles.header}>
               <div>
                 <h1 style={{...styles.title, textAlign: 'left', margin: 0}}>Echo Escape</h1>
-                <p style={styles.welcomeMessage}>Welcome, {loggedInUser}!</p>
+                <p style={styles.welcomeMessage}>Welcome, {authInfo.username}!</p>
               </div>
               <button onClick={handleLogout} style={styles.logoutButton}>Logout</button>
             </div>
@@ -158,31 +160,34 @@ const KeywordTags = ({ keywords }) => (
 
 // --- Main App Component ---
 function App() {
-  const [loggedInUser, setLoggedInUser] = useState(null);
+  const [authInfo, setAuthInfo] = useState(null);
 
   useEffect(() => {
-    const user = sessionStorage.getItem('loggedInUser');
-    if (user) {
-      setLoggedInUser(user);
+    const token = sessionStorage.getItem('token');
+    const username = sessionStorage.getItem('username');
+    if (token && username) {
+      setAuthInfo({ token, username });
     }
   }, []);
 
   const handleLogout = () => {
-    sessionStorage.removeItem('loggedInUser');
-    setLoggedInUser(null);
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('username');
+    setAuthInfo(null);
   };
 
-  const handleLogin = (username) => {
-    sessionStorage.setItem('loggedInUser', username);
-    setLoggedInUser(username);
+  const handleLogin = (info) => {
+    sessionStorage.setItem('token', info.token);
+    sessionStorage.setItem('username', info.username);
+    setAuthInfo(info);
   }
 
   return (
     <div style={styles.container}>
-      {!loggedInUser ? (
-        <AuthComponent setLoggedInUser={handleLogin} />
+      {!authInfo ? (
+        <AuthComponent setAuthInfo={handleLogin} />
       ) : (
-        <AnalysisComponent loggedInUser={loggedInUser} handleLogout={handleLogout} />
+        <AnalysisComponent authInfo={authInfo} handleLogout={handleLogout} />
       )}
     </div>
   );
