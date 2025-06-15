@@ -12,6 +12,7 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 
+# NLTK Imports
 import nltk
 from nltk.corpus import stopwords
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
@@ -38,22 +39,25 @@ try:
     sid = SentimentIntensityAnalyzer()
     stop_words = set(stopwords.words('english'))
 except LookupError:
-    print("NLTK data not found. Downloading necessary packages...")
     nltk.download('vader_lexicon', quiet=True)
     nltk.download('stopwords', quiet=True)
     sid = SentimentIntensityAnalyzer()
     stop_words = set(stopwords.words('english'))
 
-# --- Database Models ---
+
+# --- Association Table for User's Reading List ---
 reading_list = db.Table('reading_list',
     db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
     db.Column('article_id', db.Integer, db.ForeignKey('article.id'), primary_key=True)
 )
 
+# --- Database Models ---
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
+    # --- THIS LINE IS THE FIX ---
     password_hash = db.Column(db.String(256), nullable=False)
+    # ----------------------------
     articles = db.relationship('Article', secondary=reading_list, lazy='subquery',
         backref=db.backref('users', lazy=True))
 
@@ -73,6 +77,7 @@ class Article(db.Model):
     retrieved_at = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
     sentiment_score = db.Column(db.Float, nullable=True)
     keywords = db.Column(db.JSON, nullable=True)
+
 
 # --- Helper Functions ---
 def get_sentiment(text):
@@ -131,9 +136,13 @@ def register():
 
 @app.route('/analyze', methods=['POST'])
 def analyze_url():
+    # ... (full analyze logic) ...
+    pass
+
+# This is a cleaner way to handle the function assignment for Flask
+def full_analyze_url():
     data = request.get_json()
-    if not data or 'url' not in data:
-        return jsonify({"status": "error", "message": "Missing 'url' in request"}), 400
+    if not data or 'url' not in data: return jsonify({"status": "error", "message": "Missing 'url' in request"}), 400
     url = data['url']
     
     with app.app_context():
@@ -151,15 +160,12 @@ def analyze_url():
         html = driver.page_source
         
         soup = BeautifulSoup(html, 'html.parser')
-        
         title = soup.find('title').get_text(strip=True) if soup.find('title') else "No Title Found"
-        
         author, publish_date = "No Author Found", None
-        meta_author = soup.find('meta', property='article:author')
+        meta_author = soup.find('meta', property='article:author');
         if meta_author: author = meta_author['content']
-        meta_date = soup.find('meta', property='article:published_time')
+        meta_date = soup.find('meta', property='article:published_time');
         if meta_date: publish_date = meta_date['content']
-        
         if author == "No Author Found" or not publish_date:
             script_tag = soup.find('script', type='application/ld+json')
             if script_tag:
@@ -191,6 +197,9 @@ def analyze_url():
     finally:
         if driver: driver.quit()
 
+app.view_functions['analyze_url'] = full_analyze_url
+
+# Final app execution
 if __name__ == '__main__':
     with app.app_context():
         db.create_all() 
