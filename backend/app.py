@@ -1,139 +1,175 @@
-# 1. All import statements go at the very top.
+# 1. All import statements
 import datetime
-from flask import Flask, request, jsonify
-from flask_sqlalchemy import SQLAlchemy
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+import json
 import os
-from dotenv import load_dotenv
-from flask_cors import CORS
+import re
+from collections import Counter
 
-# 2. Load environment variables and create the Flask app instance.
+from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
+
+# NLTK Imports
+import nltk
+from nltk.corpus import stopwords
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+# We no longer need nltk's tokenizer
+# from nltk.tokenize import word_tokenize 
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+# --- Initial Setup ---
 load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-# 3. Configure the app.
+# --- Database Configuration ---
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# 4. Define your database models.
+# --- NLTK Setup ---
+try:
+    sid = SentimentIntensityAnalyzer()
+    stop_words = set(stopwords.words('english'))
+except LookupError:
+    print("NLTK data not found. Downloading...")
+    nltk.download('vader_lexicon', quiet=True)
+    nltk.download('stopwords', quiet=True)
+    sid = SentimentIntensityAnalyzer()
+    stop_words = set(stopwords.words('english'))
+
+# --- Database Models ---
 class Article(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     url = db.Column(db.String(500), unique=True, nullable=False)
     title = db.Column(db.String(500), nullable=False)
-    author = db.Column(db.String(200))
-    publish_date = db.Column(db.String(100))
+    author = db.Column(db.String(200), nullable=True)
+    publish_date = db.Column(db.String(100), nullable=True)
     article_text = db.Column(db.Text, nullable=False)
     retrieved_at = db.Column(db.DateTime, nullable=False, default=datetime.datetime.utcnow)
+    sentiment_score = db.Column(db.Float, nullable=True)
+    keywords = db.Column(db.JSON, nullable=True)
 
     def __repr__(self):
         return f'<Article {self.title}>'
 
-# 5. Define your routes.
+# --- Helper Functions ---
+def get_sentiment(text):
+    scores = sid.polarity_scores(text)
+    return scores['compound']
+
+# --- THIS FUNCTION IS NOW FIXED ---
+def get_keywords(text, num_keywords=10):
+    """Extracts the most common keywords from a block of text using a simple split()."""
+    print("--- Using simple, built-in tokenizer for keywords. ---")
+    # Remove punctuation and convert to lowercase
+    text = re.sub(r'[^\w\s]', '', text.lower())
+    # Use a simple split() instead of the broken nltk.word_tokenize()
+    tokens = text.split() 
+    # Filter out stopwords and single-character words
+    filtered_words = [word for word in tokens if word not in stop_words and len(word) > 2]
+    # Count the frequency of each word
+    word_counts = Counter(filtered_words)
+    # Return the most common keywords
+    return [word for word, count in word_counts.most_common(num_keywords)]
+# ------------------------------------
+
+def extract_text_from_html(soup):
+    # (The text extraction logic remains the same)
+    # ... (code omitted for brevity)
+    pass # Placeholder, the full function is in the saved code
+
+# --- API Routes ---
 @app.route('/')
 def index():
     return "The Echo Escape server is running."
 
+# Full analyze_url function remains the same, but it will now call the corrected get_keywords
 @app.route('/analyze', methods=['POST'])
 def analyze_url():
+    # ... (code omitted for brevity)
+    pass # Placeholder, the full function is in the saved code
+
+# --- Complete Functions (Copy these into the placeholders above) ---
+def full_extract_text_from_html(soup):
+    article_body = soup.find('div', class_='RichTextBody')
+    if article_body:
+        print("Strategy 1: Found RichTextBody")
+        paragraphs = article_body.find_all('p')
+        return '\n\n'.join([p.get_text(strip=True) for p in paragraphs])
+    script_tag = soup.find('script', type='application/ld+json')
+    if script_tag:
+        try:
+            data = json.loads(script_tag.string)
+            if isinstance(data, list): data = data[0]
+            if data.get('@type') == 'NewsArticle' and data.get('articleBody'):
+                print("Strategy 2: Found articleBody in JSON-LD")
+                return data['articleBody']
+        except (json.JSONDecodeError, IndexError): pass
+    article_tag = soup.find('article')
+    if article_tag:
+        print("Strategy 3: Found <article> tag")
+        paragraphs = article_tag.find_all('p')
+        return '\n\n'.join([p.get_text(strip=True) for p in paragraphs])
+    return None
+
+def full_analyze_url():
     data = request.get_json()
     if not data or 'url' not in data:
         return jsonify({"status": "error", "message": "Missing 'url' in request"}), 400
-
     url = data['url']
     
-    existing_article = Article.query.filter_by(url=url).first()
-    if existing_article:
-        print(f"Article already in DB: {existing_article.title}")
-        return jsonify({
-            "status": "success", 
-            "message": "Article already exists in database.",
-            "data": {
-                "title": existing_article.title,
-                "author": existing_article.author,
-                "publish_date": existing_article.publish_date,
-                "article_text": existing_article.article_text
-            }
-        })
+    with app.app_context():
+        existing_article = Article.query.filter_by(url=url).first()
+        if existing_article:
+            return jsonify({ "status": "success", "message": "Article already exists in database.", "data": { "title": existing_article.title, "author": existing_article.author, "publish_date": existing_article.publish_date, "article_text": existing_article.article_text, "sentiment": existing_article.sentiment_score, "keywords": existing_article.keywords } })
 
-    print(f"New URL. Starting scraping for: {url}")
-    
     driver = None
     try:
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
-        
+        chrome_options = Options(); chrome_options.add_argument("--headless"); chrome_options.add_argument("--no-sandbox"); chrome_options.add_argument("--disable-dev-shm-usage"); chrome_options.add_argument("--disable-gpu"); chrome_options.add_argument("--log-level=3"); chrome_options.add_argument("--disable-blink-features=AutomationControlled"); chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"]); chrome_options.add_experimental_option('useAutomationExtension', False)
         driver = webdriver.Chrome(service=Service(), options=chrome_options)
         driver.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'})
-        
         driver.get(url)
-        
-        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR, "h1")))
+        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.TAG_NAME, "h1")))
         html = driver.page_source
         
         soup = BeautifulSoup(html, 'html.parser')
+        title = soup.find('title').get_text() if soup.find('title') else "No title found"
+        author_tag = soup.find('meta', property='article:author'); author = author_tag['content'] if author_tag else "No author found"
+        date_tag = soup.find('meta', property='article:published_time'); publish_date = date_tag['content'] if date_tag else None
         
-        title = soup.find('title').get_text()
-        author_tag = soup.find('meta', property='article:author')
-        author = author_tag['content'] if author_tag else "No author found"
-        date_tag = soup.find('meta', property='article:published_time')
-        publish_date = date_tag['content'] if date_tag else None
+        article_text = full_extract_text_from_html(soup)
+        if not article_text: raise ValueError("Failed to extract article text using all available strategies.")
         
-        # --- CORRECTED LINE USING THE CLASS NAME YOU FOUND ---
-        article_body_div = soup.find('div', class_='RichTextBody')
+        sentiment_score = get_sentiment(article_text)
+        keywords = get_keywords(article_text)
         
-        article_text = "No article text found"
-        if article_body_div:
-            paragraphs = article_body_div.find_all('p')
-            article_text = '\n\n'.join([p.get_text(strip=True) for p in paragraphs])
-        
-        if not title or not article_text or article_text == "No article text found":
-             raise ValueError("Failed to extract title or text from the page.")
-        
-        new_article = Article(
-            url=url,
-            title=title,
-            author=author,
-            publish_date=publish_date,
-            article_text=article_text
-        )
-        db.session.add(new_article)
-        db.session.commit()
-        print(f"SUCCESS: Saved '{title}' to database.")
-
-        return jsonify({
-            "status": "success",
-            "message": "New article scraped and saved.",
-            "data": {
-                "title": title,
-                "author": author,
-                "publish_date": publish_date,
-                "article_text": article_text
-            }
-        })
-
+        with app.app_context():
+            new_article = Article( url=url, title=title, author=author, publish_date=publish_date, article_text=article_text, sentiment_score=sentiment_score, keywords=keywords )
+            db.session.add(new_article)
+            db.session.commit()
+            return jsonify({ "status": "success", "message": "New article scraped and saved.", "data": { "title": title, "author": author, "publish_date": publish_date, "article_text": article_text, "sentiment": sentiment_score, "keywords": keywords } })
     except Exception as e:
         print(f"An error occurred: {e}")
         db.session.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
-        
     finally:
-        if driver:
-            driver.quit()
+        if driver: driver.quit()
 
-# 6. Run the app
+# Assign the full functions to the routes
+app.view_functions['extract_text_from_html'] = full_extract_text_from_html
+app.view_functions['analyze_url'] = full_analyze_url
+
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()
+        db.create_all() 
     app.run(debug=True)
+
