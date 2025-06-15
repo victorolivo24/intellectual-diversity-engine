@@ -110,15 +110,10 @@ def login():
     data = request.get_json()
     if not data or not data.get('username') or not data.get('password'):
         return jsonify({'message': 'Could not verify'}), 401
-    
     user = User.query.filter_by(username=data['username']).first()
     if not user or not user.check_password(data['password']):
         return jsonify({'message': 'Invalid username or password'}), 401
-
-    token = jwt.encode({
-        'id': user.id, 
-        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
-    }, app.config['SECRET_KEY'], "HS256")
+    token = jwt.encode({'id': user.id, 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)}, app.config['SECRET_KEY'], "HS256")
     return jsonify({'token': token, 'username': user.username})
 
 @app.route('/register', methods=['POST'])
@@ -130,6 +125,22 @@ def register():
     db.session.add(user); db.session.commit()
     return jsonify({"status": "success", "message": "User registered."})
 
+# --- NEW: Dashboard Data Endpoint ---
+@app.route('/dashboard', methods=['GET'])
+@token_required
+def get_dashboard_data(current_user):
+    articles_data = []
+    for article in current_user.articles:
+        articles_data.append({
+            "title": article.title,
+            "url": article.url,
+            "author": article.author,
+            "sentiment": article.sentiment_score,
+            "keywords": article.keywords
+        })
+    return jsonify({"status": "success", "data": articles_data})
+# ------------------------------------
+
 @app.route('/analyze', methods=['POST'])
 @token_required
 def analyze_url(current_user):
@@ -139,18 +150,20 @@ def analyze_url(current_user):
     
     existing_article = Article.query.filter_by(url=url).first()
     if existing_article:
-        current_user.articles.append(existing_article)
-        db.session.commit()
+        if existing_article not in current_user.articles:
+            current_user.articles.append(existing_article)
+            db.session.commit()
         return jsonify({ "status": "success", "message": "Article already exists and has been added to your reading list.", "data": { "title": existing_article.title, "author": existing_article.author, "publish_date": existing_article.publish_date, "article_text": existing_article.article_text, "sentiment": existing_article.sentiment_score, "keywords": existing_article.keywords } })
 
     driver = None
     try:
-        # (Selenium logic remains the same)
         chrome_options = Options(); chrome_options.add_argument("--headless"); chrome_options.add_argument("--no-sandbox"); chrome_options.add_argument("--disable-dev-shm-usage"); chrome_options.add_argument("--disable-gpu"); chrome_options.add_argument("--log-level=3"); chrome_options.add_argument("--disable-blink-features=AutomationControlled"); chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"]); chrome_options.add_experimental_option('useAutomationExtension', False)
         driver = webdriver.Chrome(service=Service(), options=chrome_options)
         driver.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'})
         driver.get(url); WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.TAG_NAME, "h1")))
-        html = driver.page_source; soup = BeautifulSoup(html, 'html.parser')
+        html = driver.page_source
+        
+        soup = BeautifulSoup(html, 'html.parser')
         
         title = soup.find('title').get_text(strip=True) if soup.find('title') else "No Title Found"
         author, publish_date = "No Author Found", None
@@ -178,7 +191,6 @@ def analyze_url(current_user):
         
         new_article = Article( url=url, title=title, author=author, publish_date=publish_date, article_text=article_text, sentiment_score=sentiment_score, keywords=keywords )
         db.session.add(new_article)
-        # Link the new article to the current user
         current_user.articles.append(new_article)
         db.session.commit()
         return jsonify({ "status": "success", "message": "New article scraped and saved.", "data": { "title": title, "author": author, "publish_date": publish_date, "article_text": article_text, "sentiment": sentiment_score, "keywords": keywords } })
@@ -188,7 +200,6 @@ def analyze_url(current_user):
     finally:
         if driver: driver.quit()
 
-# Final app execution
 if __name__ == '__main__':
     with app.app_context():
         db.create_all() 
