@@ -15,8 +15,7 @@ from flask_sqlalchemy import SQLAlchemy
 import nltk
 from nltk.corpus import stopwords
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
-# We no longer need nltk's tokenizer
-# from nltk.tokenize import word_tokenize 
+from nltk.tokenize import word_tokenize
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -42,6 +41,7 @@ try:
 except LookupError:
     print("NLTK data not found. Downloading...")
     nltk.download('vader_lexicon', quiet=True)
+    nltk.download('punkt', quiet=True)
     nltk.download('stopwords', quiet=True)
     sid = SentimentIntensityAnalyzer()
     stop_words = set(stopwords.words('english'))
@@ -58,70 +58,60 @@ class Article(db.Model):
     sentiment_score = db.Column(db.Float, nullable=True)
     keywords = db.Column(db.JSON, nullable=True)
 
-    def __repr__(self):
-        return f'<Article {self.title}>'
-
 # --- Helper Functions ---
 def get_sentiment(text):
     scores = sid.polarity_scores(text)
     return scores['compound']
 
-# --- THIS FUNCTION IS NOW FIXED ---
 def get_keywords(text, num_keywords=10):
-    """Extracts the most common keywords from a block of text using a simple split()."""
-    print("--- Using simple, built-in tokenizer for keywords. ---")
-    # Remove punctuation and convert to lowercase
     text = re.sub(r'[^\w\s]', '', text.lower())
-    # Use a simple split() instead of the broken nltk.word_tokenize()
-    tokens = text.split() 
-    # Filter out stopwords and single-character words
+    tokens = text.split()
     filtered_words = [word for word in tokens if word not in stop_words and len(word) > 2]
-    # Count the frequency of each word
     word_counts = Counter(filtered_words)
-    # Return the most common keywords
     return [word for word, count in word_counts.most_common(num_keywords)]
-# ------------------------------------
 
+# --- NEW: Systematic Waterfall Extraction Function ---
 def extract_text_from_html(soup):
-    # (The text extraction logic remains the same)
-    # ... (code omitted for brevity)
-    pass # Placeholder, the full function is in the saved code
-
-# --- API Routes ---
-@app.route('/')
-def index():
-    return "The Echo Escape server is running."
-
-# Full analyze_url function remains the same, but it will now call the corrected get_keywords
-@app.route('/analyze', methods=['POST'])
-def analyze_url():
-    # ... (code omitted for brevity)
-    pass # Placeholder, the full function is in the saved code
-
-# --- Complete Functions (Copy these into the placeholders above) ---
-def full_extract_text_from_html(soup):
-    article_body = soup.find('div', class_='RichTextBody')
-    if article_body:
-        print("Strategy 1: Found RichTextBody")
-        paragraphs = article_body.find_all('p')
-        return '\n\n'.join([p.get_text(strip=True) for p in paragraphs])
+    """Tries a waterfall of strategies to find the main article text."""
+    
+    # Strategy 1: Look for JSON-LD script (Most reliable)
     script_tag = soup.find('script', type='application/ld+json')
     if script_tag:
         try:
             data = json.loads(script_tag.string)
             if isinstance(data, list): data = data[0]
             if data.get('@type') == 'NewsArticle' and data.get('articleBody'):
-                print("Strategy 2: Found articleBody in JSON-LD")
+                print("Extraction Strategy: JSON-LD")
                 return data['articleBody']
         except (json.JSONDecodeError, IndexError): pass
+
+    # Strategy 2: Look for common article body class names
+    common_classes = ['RichTextBody', 'article-body', 'story-content', 'main-content', 'entry-content', 'post-content']
+    for class_name in common_classes:
+        container = soup.find('div', class_=class_name)
+        if container:
+            print(f"Extraction Strategy: Common Class ('{class_name}')")
+            paragraphs = container.find_all('p')
+            return '\n\n'.join([p.get_text(strip=True) for p in paragraphs])
+
+    # Strategy 3: Look for semantic HTML5 tags
     article_tag = soup.find('article')
     if article_tag:
-        print("Strategy 3: Found <article> tag")
+        print("Extraction Strategy: <article> tag")
         paragraphs = article_tag.find_all('p')
         return '\n\n'.join([p.get_text(strip=True) for p in paragraphs])
+    
+    main_tag = soup.find('main')
+    if main_tag:
+        print("Extraction Strategy: <main> tag")
+        paragraphs = main_tag.find_all('p')
+        return '\n\n'.join([p.get_text(strip=True) for p in paragraphs])
+
     return None
 
-def full_analyze_url():
+# --- API Routes ---
+@app.route('/analyze', methods=['POST'])
+def analyze_url():
     data = request.get_json()
     if not data or 'url' not in data:
         return jsonify({"status": "error", "message": "Missing 'url' in request"}), 400
@@ -130,6 +120,7 @@ def full_analyze_url():
     with app.app_context():
         existing_article = Article.query.filter_by(url=url).first()
         if existing_article:
+            print(f"Article already in DB: {existing_article.title}")
             return jsonify({ "status": "success", "message": "Article already exists in database.", "data": { "title": existing_article.title, "author": existing_article.author, "publish_date": existing_article.publish_date, "article_text": existing_article.article_text, "sentiment": existing_article.sentiment_score, "keywords": existing_article.keywords } })
 
     driver = None
@@ -142,11 +133,28 @@ def full_analyze_url():
         html = driver.page_source
         
         soup = BeautifulSoup(html, 'html.parser')
-        title = soup.find('title').get_text() if soup.find('title') else "No title found"
-        author_tag = soup.find('meta', property='article:author'); author = author_tag['content'] if author_tag else "No author found"
-        date_tag = soup.find('meta', property='article:published_time'); publish_date = date_tag['content'] if date_tag else None
         
-        article_text = full_extract_text_from_html(soup)
+        title = soup.find('title').get_text() if soup.find('title') else "No title found"
+        author = "No author found"
+        publish_date = None
+        author_tag = soup.find('meta', property='article:author');
+        if author_tag: author = author_tag['content']
+        date_tag = soup.find('meta', property='article:published_time');
+        if date_tag: publish_date = date_tag['content']
+        if author == "No author found" or not publish_date:
+            script_tag = soup.find('script', type='application/ld+json')
+            if script_tag:
+                try:
+                    data = json.loads(script_tag.string);
+                    if isinstance(data, list): data = data[0]
+                    if author == "No author found" and data.get('author'):
+                        author_data = data['author'];
+                        if isinstance(author_data, list): author_data = author_data[0]
+                        if author_data.get('name'): author = author_data['name']
+                    if not publish_date and data.get('datePublished'): publish_date = data['datePublished']
+                except (json.JSONDecodeError, IndexError): pass
+        
+        article_text = extract_text_from_html(soup)
         if not article_text: raise ValueError("Failed to extract article text using all available strategies.")
         
         sentiment_score = get_sentiment(article_text)
@@ -164,12 +172,7 @@ def full_analyze_url():
     finally:
         if driver: driver.quit()
 
-# Assign the full functions to the routes
-app.view_functions['extract_text_from_html'] = full_extract_text_from_html
-app.view_functions['analyze_url'] = full_analyze_url
-
 if __name__ == '__main__':
     with app.app_context():
         db.create_all() 
     app.run(debug=True)
-
