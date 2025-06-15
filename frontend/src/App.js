@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-// NEW: Import components from our new charting library
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-// --- STYLING OBJECT (some new styles added) ---
+// --- STYLING OBJECT ---
 const styles = {
   container: { display: 'flex', justifyContent: 'center', alignItems: 'flex-start', minHeight: '100vh', backgroundColor: '#f0f2f5', padding: '20px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
   card: { width: '100%', maxWidth: '900px', backgroundColor: '#ffffff', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)', padding: '40px', boxSizing: 'border-box', marginTop: '50px' },
@@ -31,8 +30,8 @@ const styles = {
   viewTabs: { display: 'flex', gap: '10px', borderBottom: '1px solid #dddfe2', marginBottom: '30px' },
   tab: { padding: '10px 20px', cursor: 'pointer', borderBottom: '3px solid transparent', color: '#606770', fontWeight: 'bold' },
   activeTab: { color: '#1877f2', borderBottom: '3px solid #1877f2' },
-  dashboardGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' },
-  chartContainer: { height: '300px' },
+  dashboardGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', alignItems: 'flex-start' },
+  chartContainer: { height: '300px', width: '100%' },
   historyList: { listStyle: 'none', padding: 0, margin: 0, maxHeight: '300px', overflowY: 'auto' },
   historyItem: { marginBottom: '10px', padding: '10px', backgroundColor: '#f7f8fa', borderRadius: '6px' },
 };
@@ -48,8 +47,7 @@ const AuthComponent = ({ setAuthInfo }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setMessage('');
+    setError(''); setMessage('');
     const endpoint = isLogin ? '/login' : '/register';
     const body = JSON.stringify({ username, password });
     try {
@@ -61,7 +59,7 @@ const AuthComponent = ({ setAuthInfo }) => {
         if(isLogin) {
             setAuthInfo({ token: data.token, username: data.username });
         } else {
-            setMessage('Registration successful! Please switch to Log In.'); setIsLogin(true);
+            setMessage('Registration successful! Please Log In.'); setIsLogin(true);
         }
     } catch (err) { setError(err.message); }
   };
@@ -168,8 +166,30 @@ const DashboardComponent = ({ authInfo }) => {
     { name: 'Positive', value: dashboardData.filter(a => a.sentiment > 0.05).length },
     { name: 'Negative', value: dashboardData.filter(a => a.sentiment < -0.05).length },
     { name: 'Neutral', value: dashboardData.filter(a => a.sentiment >= -0.05 && a.sentiment <= 0.05).length }
-  ];
-  const COLORS = ['#31a24c', '#fa383e', '#606770'];
+  ].filter(item => item.value > 0); 
+
+  // --- THIS IS THE FIX ---
+  // A color map to ensure the correct color is always used for each category.
+  const SENTIMENT_COLORS = {
+    Positive: '#31a24c',
+    Negative: '#fa383e',
+    Neutral: '#606770',
+  };
+  // -----------------------
+  
+  const RADIAN = Math.PI / 180;
+  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
+    if (percent === 0) return null; // Don't render label for 0%
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    return (
+        <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontWeight="bold">
+            {`${(percent * 100).toFixed(0)}%`}
+        </text>
+    );
+  };
+
 
   return (
     <div>
@@ -178,17 +198,20 @@ const DashboardComponent = ({ authInfo }) => {
             <div>
                 <h3 style={styles.articleTitle}>Sentiment Analysis</h3>
                 <div style={styles.chartContainer}>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie data={sentimentData} cx="50%" cy="50%" labelLine={false} outerRadius={80} fill="#8884d8" dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                                {sentimentData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
-                            </Pie>
-                            <Tooltip />
-                            <Legend />
-                        </PieChart>
-                    </ResponsiveContainer>
+                    {dashboardData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie data={sentimentData} cx="50%" cy="50%" labelLine={false} label={renderCustomizedLabel} outerRadius={100} fill="#8884d8" dataKey="value">
+                                    {sentimentData.map((entry, index) => (
+                                        // Use the color map to get the correct color by name
+                                        <Cell key={`cell-${index}`} fill={SENTIMENT_COLORS[entry.name]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip />
+                                <Legend />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    ) : <p>Analyze an article to see your sentiment breakdown.</p>}
                 </div>
             </div>
             <div>
@@ -221,7 +244,7 @@ const KeywordTags = ({ keywords }) => (
 // --- Main App Component ---
 function App() {
   const [authInfo, setAuthInfo] = useState(null);
-  const [currentView, setCurrentView] = useState('analyze'); // 'analyze' or 'dashboard'
+  const [currentView, setCurrentView] = useState('analyze');
 
   useEffect(() => {
     const token = sessionStorage.getItem('token');
