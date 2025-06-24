@@ -20,10 +20,13 @@ const styles = {
   errorText: { color: '#fa383e', marginBottom: '20px', textAlign: 'center' },
   sectionTitle: { fontSize: '20px', fontWeight: 'bold', marginTop: '20px', marginBottom: '10px' },
   sentimentBar: { marginBottom: '8px' },
-  wordCloud: { display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', justifyContent: 'center', padding: '10px', minHeight: '200px' },
-  wordItem: { cursor: 'default', padding: '5px' },
+  wordCloud: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
+  wordItem: { cursor: 'default' },
   historyList: { listStyle: 'none', padding: 0, margin: 0 },
-  historyItem: { padding: '8px', borderBottom: '1px solid #eee' }
+  historyItem: { padding: '8px', borderBottom: '1px solid #eee' },
+  topicTable: { width: '100%', borderCollapse: 'collapse', marginTop: '10px'},
+  tableHeader: { borderBottom: '2px solid #333', textAlign: 'left', padding: '8px' },
+  tableCell: { borderBottom: '1px solid #eee', padding: '8px' },
 };
 
 // --- Auth Component ---
@@ -92,10 +95,13 @@ function AnalysisComponent({ auth, onBack, onAnalysisComplete }) {
   };
 
   return (
-    <div>
+    <div style={styles.card}>
+      <div style={styles.nav}>
+        <button onClick={onBack} style={styles.navButton}>← Back</button>
+      </div>
       <h2>Analyze New Article</h2>
       <div style={styles.inputContainer}>
-        <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://..." style={styles.input} onKeyPress={e => e.key === 'Enter' && analyze()}/>
+        <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://..." style={styles.input}/>
         <button onClick={analyze} style={styles.button} disabled={loading}>{loading?'Analyzing...':'Analyze'}</button>
       </div>
       {error && <div style={styles.errorText}>{error}</div>}
@@ -108,17 +114,14 @@ function AnalysisComponent({ auth, onBack, onAnalysisComplete }) {
           <div style={styles.wordCloud}>
             {Array.isArray(result.keywords) && result.keywords.length > 0
               ? result.keywords.map((w,i)=>(
-                  <span key={i} style={{...styles.wordItem, fontSize: '16px', padding: '5px 10px', backgroundColor: '#e4e6eb', borderRadius: '15px'}}>{w}</span>
+                  <span key={i} style={{ padding: '5px 10px', backgroundColor: '#e4e6eb', borderRadius: '15px' }}>{w}</span>
                 ))
               : <p>No keywords available.</p>
             }
           </div>
           <div style={styles.sectionTitle}>Article Text</div>
           <div style={{ maxHeight:'300px', overflowY:'auto' }}>
-            {result.article_text
-              ? result.article_text.split('\n\n').map((p,i)=>(<p key={i}>{p}</p>))
-              : <p>Full article text not available.</p>
-            }
+            {result.article_text ? result.article_text.split('\n\n').map((p,i)=>(<p key={i}>{p}</p>)) : <p>Full article text not available.</p>}
           </div>
         </div>
       )}
@@ -127,47 +130,66 @@ function AnalysisComponent({ auth, onBack, onAnalysisComplete }) {
 }
 
 // --- Dashboard Component ---
-function DashboardComponent({ auth, key }) { // Add key to force re-fetch
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+function DashboardComponent({ auth, key }) {
+  const [dashboardData, setDashboardData] = useState({ loading: true, error: null, articles: [], topicAnalysis: [] });
 
   useEffect(() => {
-    setLoading(true);
-    fetch('http://127.0.0.1:5000/dashboard',{headers:{'x-access-token':auth.token}})
-      .then(res=>res.json())
-      .then(arts=>setData(arts))
-      .catch(e=>setError(e.message))
-      .finally(()=>setLoading(false));
+    setDashboardData(s => ({ ...s, loading: true }));
+    const fetchData = async () => {
+      try {
+        const [articlesRes, topicsRes] = await Promise.all([
+          fetch('http://127.0.0.1:5000/dashboard', { headers: { 'x-access-token': auth.token } }),
+          fetch('http://127.0.0.1:5000/topic_analysis', { headers: { 'x-access-token': auth.token } })
+        ]);
+        if (!articlesRes.ok || !topicsRes.ok) throw new Error("Could not fetch data.");
+        const articles = await articlesRes.json();
+        const topicAnalysis = await topicsRes.json();
+        setDashboardData({ loading: false, error: null, articles: articles || [], topicAnalysis: topicAnalysis || [] });
+      } catch (err) {
+        setDashboardData({ loading: false, error: err.message, articles: [], topicAnalysis: [] });
+      }
+    };
+    fetchData();
   }, [auth.token, key]);
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div style={styles.errorText}>Error: {error}</div>;
-
-  const freq = {};
-  data.forEach(a => {
-      if(a.keywords) {
-          a.keywords.forEach(w => freq[w] = (freq[w]||0)+1)
-      }
-  });
-  const sortedKeywords = Object.entries(freq).sort((a,b)=>b[1]-a[1]);
+  if (dashboardData.loading) return <div style={styles.card}>Loading...</div>;
+  if (dashboardData.error) return <div style={styles.card}><div style={styles.errorText}>{dashboardData.error}</div></div>;
 
   return (
-    <div>
+    <div style={styles.card}>
       <h2 style={styles.title}>Your Information Diet</h2>
-      <div style={styles.sectionTitle}>Top Keywords</div>
-      <div style={styles.wordCloud}>
-        {sortedKeywords.length > 0 ? sortedKeywords.slice(0,25).map(([word,count])=>(
-          <span key={word} style={{ ...styles.wordItem, fontSize:`${12 + count * 4}px`, opacity: 0.6 + count * 0.1 }}>{word}</span>
-        )) : <p>No keywords found in your history.</p>}
+      
+      <div style={styles.sectionTitle}>Topic Sentiments</div>
+      <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+        <table style={styles.topicTable}>
+          <thead>
+            <tr>
+              <th style={styles.tableHeader}>Topic</th>
+              <th style={styles.tableHeader}>Articles</th>
+              <th style={styles.tableHeader}>Avg. Sentiment</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dashboardData.topicAnalysis.map((item, i) => (
+              <tr key={i}>
+                <td style={styles.tableCell}>{item.topic}</td>
+                <td style={styles.tableCell}>{item.article_count}</td>
+                <td style={{...styles.tableCell, color: item.average_sentiment > 0.05 ? '#28a745' : item.average_sentiment < -0.05 ? '#dc3545' : 'inherit', fontWeight: 'bold'}}>
+                  {item.average_sentiment.toFixed(2)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
+
       <div style={styles.sectionTitle}>Reading History</div>
       <ul style={styles.historyList}>
-        {data.length > 0 ? data.map((a,i)=>(
+        {dashboardData.articles.map((a, i) => (
           <li key={i} style={styles.historyItem}>
             <strong>{a.title}</strong> — Score: {typeof a.sentiment === 'number' ? a.sentiment.toFixed(2) : 'N/A'}
           </li>
-        )) : <p>No articles analyzed yet.</p>}
+        ))}
       </ul>
     </div>
   );
@@ -176,7 +198,7 @@ function DashboardComponent({ auth, key }) { // Add key to force re-fetch
 // --- Main App ---
 export default function App() {
   const [auth, setAuth] = useState(null);
-  const [view, setView] = useState('analyze');
+  const [view, setView] = useState('dashboard');
   const [dashboardKey, setDashboardKey] = useState(0);
 
   useEffect(() => {
@@ -186,10 +208,10 @@ export default function App() {
   }, []);
 
   const handleAnalysisComplete = () => {
-    setDashboardKey(k => k + 1); // Increment key to force Dashboard to re-fetch
-  }
+    setDashboardKey(k => k + 1);
+  };
 
-  if (!auth) return <AuthComponent onAuth={info => { sessionStorage.setItem('token', info.token); sessionStorage.setItem('username', info.username); setAuth(info); }} />;
+  if (!auth) return <div style={styles.container}><AuthComponent onAuth={info => { sessionStorage.setItem('token', info.token); sessionStorage.setItem('username', info.username); setAuth(info); }} /></div>;
 
   return (
     <div style={styles.container}>
@@ -201,7 +223,7 @@ export default function App() {
         </div>
         {view==='dashboard'
           ? <DashboardComponent auth={auth} key={dashboardKey}/>
-          : <AnalysisComponent auth={auth} onBack={() => setView('dashboard')} onAnalysisComplete={handleAnalysisComplete} />
+          : <AnalysisComponent auth={auth} onBack={() => setView('dashboard')} onAnalysisComplete={handleAnalysisComplete}/>
         }
       </div>
     </div>
