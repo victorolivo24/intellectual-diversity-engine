@@ -195,6 +195,49 @@ def analyze(current_user):
     except Exception as e:
         db.session.rollback(); return jsonify({'message': str(e)}), 500
 
+# In app.py
+
+@app.route('/source_analysis', methods=['GET'])
+@token_required
+def source_analysis(current_user):
+    """Parses the domain from each article URL and returns a count for each."""
+    # Using 'www.' prefix can lead to duplicates (e.g., www.cnn.com and cnn.com)
+    # This logic cleans it up.
+    domains = [
+        urlparse(article.url).netloc.replace('www.', '') 
+        for article in current_user.articles
+    ]
+    domain_counts = Counter(domains)
+    
+    # Sort by count descending, then by domain name alphabetically
+    sorted_domains = sorted(domain_counts.items(), key=lambda item: (-item[1], item[0]))
+    
+    result = [{'domain': domain, 'count': count} for domain, count in sorted_domains]
+    return jsonify(result)
+
+
+@app.route('/sentiment_timeline', methods=['GET'])
+@token_required
+def sentiment_timeline(current_user):
+    """Groups articles by date and calculates the average sentiment for each day."""
+    daily_sentiments = defaultdict(list)
+    
+    for article in current_user.articles:
+        # Group scores by date
+        day = article.retrieved_at.strftime('%Y-%m-%d')
+        daily_sentiments[day].append(article.sentiment_score)
+        
+    # Calculate the average for each day
+    analysis_results = []
+    for day, scores in daily_sentiments.items():
+        if scores:
+            average = sum(scores) / len(scores)
+            analysis_results.append({'date': day, 'average_sentiment': average})
+            
+    # Sort by date
+    analysis_results.sort(key=lambda item: item['date'])
+    
+    return jsonify(analysis_results)
 # 7. Main execution block
 if __name__ == '__main__':
     with app.app_context():
