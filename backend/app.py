@@ -121,7 +121,8 @@ def login():
 @app.route('/dashboard', methods=['GET'])
 @token_required
 def dashboard(current_user):
-    articles = [{'title': a.title, 'url': a.url, 'sentiment': a.sentiment_score, 'keywords': a.keywords, 'category': a.category} for a in current_user.articles]
+    # ADDED 'id': a.id to the dictionary
+    articles = [{'id': a.id, 'title': a.title, 'url': a.url, 'sentiment': a.sentiment_score, 'keywords': a.keywords, 'category': a.category} for a in current_user.articles]
     return jsonify(articles)
 
 # --- NEW: Category Analysis Endpoint ---
