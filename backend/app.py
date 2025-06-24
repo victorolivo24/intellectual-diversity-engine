@@ -3,7 +3,7 @@ import datetime, json, os, re
 from collections import Counter, defaultdict
 from functools import wraps
 import requests
-from urlib.parse import urlparse
+from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
