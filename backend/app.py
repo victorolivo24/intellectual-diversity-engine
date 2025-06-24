@@ -81,9 +81,8 @@ def get_ai_analysis(text):
     prompt = f"""
     Analyze the following news article text. Provide your analysis in a single, valid JSON object with three keys:
     1. "sentiment_score": A float from -1.0 (very negative) to 1.0 (very positive), assessing the overall tone.
-    2. "keywords": A JSON array of the 7 most relevant and specific keywords or key phrases (2-3 words).
+    2. "keywords": A JSON array of the 5-7 most relevant, general, single-word keywords. These should be broad topics. Normalize them to their base form (e.g., "economy" not "economic", "politics" not "political").
     3. "category": A single string, choosing the ONE most fitting category for this article from the following list: {categories}
-
     Article Text: "{truncated_text}"
     """
     
