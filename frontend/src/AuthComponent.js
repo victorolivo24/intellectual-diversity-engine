@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import styles from "./styles.js";
 
 export default function AuthComponent({ onAuth }) {
   const [mode, setMode] = useState('login');

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'; 
+ import styles from "./styles.js";
  
  export default function DashboardComponent({ auth, onRefresh, key }) {
   const [state, setState] = useState({
