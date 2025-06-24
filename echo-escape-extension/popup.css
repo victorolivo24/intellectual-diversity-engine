@@ -1,3 +1,27 @@
+/* Add to the bottom of popup.css */
+.results-container {
+    margin-top: 20px;
+}
+.result-item {
+    margin-bottom: 10px;
+}
+.result-item strong {
+    color: #333;
+}
+.result-item ul {
+    list-style-type: none;
+    padding-left: 0;
+    margin: 5px 0 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+.result-item li {
+    background-color: #e4e6eb;
+    padding: 3px 8px;
+    border-radius: 15px;
+    font-size: 12px;
+}
 body {
     width: 350px; /* Set a fixed width for the popup */
     margin: 0;
@@ -58,4 +82,15 @@ input[type="password"] {
     color: #fa383e;
     text-align: center;
     margin-top: 10px;
+}
+/* Add to popup.css */
+.auth-switch {
+    text-align: center;
+    font-size: 12px;
+    margin-top: 15px;
+}
+.auth-switch a {
+    color: #1877f2;
+    text-decoration: none;
+    font-weight: bold;
 }
