@@ -125,6 +125,30 @@ def dashboard(current_user):
     articles = [{'id': a.id, 'title': a.title, 'url': a.url, 'sentiment': a.sentiment_score, 'keywords': a.keywords, 'category': a.category} for a in current_user.articles]
     return jsonify(articles)
 
+@app.route('/move_article', methods=['POST'])
+@token_required
+def move_article(current_user):
+    data = request.get_json()
+    article_id = data.get('article_id')
+    new_category = data.get('new_category')
+
+    # Basic validation
+    valid_categories = ["Politics", "Technology", "Sports", "Business", "Entertainment", "Science", "Health", "World News", "Lifestyle", "Crime", "Other"]
+    if not article_id or not new_category or new_category not in valid_categories:
+        return jsonify({'message': 'Invalid request data'}), 400
+
+    article = Article.query.get(article_id)
+
+    # Security check: ensure the article exists and belongs to the current user's reading list
+    if not article or article not in current_user.articles:
+        return jsonify({'message': 'Article not found or access denied'}), 404
+
+    # Update the category and save to the database
+    article.category = new_category
+    db.session.commit()
+
+    return jsonify({'message': f"Article '{article.title}' moved to '{new_category}' successfully."})
+
 # --- NEW: Category Analysis Endpoint ---
 @app.route('/category_analysis', methods=['GET'])
 @token_required
