@@ -1,35 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 
 // --- STYLES ---
 const styles = {
   container: {
     display: 'flex', justifyContent: 'center', alignItems: 'flex-start',
-    minHeight: '100vh', backgroundColor: '#f0f2f5', padding: '20px'
+    minHeight: '100vh', backgroundColor: '#f0f2f5', padding: '20px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
   },
   card: {
-    width: '100%', maxWidth: '800px', backgroundColor: '#fff',
-    borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
-    padding: '30px', marginTop: '40px'
+    width: '100%', maxWidth: '900px', backgroundColor: '#fff',
+    borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+    padding: '40px', marginTop: '50px'
   },
-  nav: { display: 'flex', gap: '15px', marginBottom: '20px' },
-  navButton: { padding: '8px 16px', cursor: 'pointer', border: '1px solid #ccc', borderRadius: '4px', background: 'none' },
-  activeNavButton: { backgroundColor: '#1877f2', color: '#fff', borderColor: '#1877f2' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
+  welcomeMessage: { fontSize: '16px', color: '#606770' },
+  logoutButton: { border: 'none', background: 'transparent', color: '#1877f2', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' },
+  nav: { display: 'flex', gap: '15px', marginBottom: '20px', borderBottom: '1px solid #dddfe2' },
+  navButton: { padding: '10px 20px', cursor: 'pointer', border: 'none', borderBottom: '3px solid transparent', background: 'none', fontWeight: 'bold', color: '#606770' },
+  activeNavButton: { color: '#1877f2', borderBottom: '3px solid #1877f2' },
   inputContainer: { display: 'flex', gap: '10px', marginBottom: '20px' },
   input: { flex: 1, padding: '10px', borderRadius: '4px', border: '1px solid #ccc' },
   button: { padding: '10px 20px', borderRadius: '4px', border: 'none', backgroundColor: '#1877f2', color: '#fff', cursor: 'pointer' },
   errorText: { color: '#fa383e', marginBottom: '20px', textAlign: 'center' },
-  sectionTitle: { fontSize: '20px', fontWeight: 'bold', marginTop: '20px', marginBottom: '10px' },
-  sentimentBar: { marginBottom: '8px' },
-  wordCloud: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
-  wordItem: { cursor: 'default' },
-  historyList: { listStyle: 'none', padding: 0, margin: 0 },
-  historyItem: { padding: '8px', borderBottom: '1px solid #eee' },
-  topicTable: { width: '100%', borderCollapse: 'collapse', marginTop: '10px'},
-  tableHeader: { borderBottom: '2px solid #333', textAlign: 'left', padding: '8px' },
-  tableCell: { borderBottom: '1px solid #eee', padding: '8px' },
+  sectionTitle: { fontSize: '20px', fontWeight: 'bold', marginTop: '20px', marginBottom: '15px' },
+  wordCloud: { display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', padding: '10px' },
+  wordItem: { cursor: 'default', padding: '5px' },
+  historyList: { listStyle: 'none', padding: 0, margin: 0, maxHeight: '400px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '8px' },
+  historyItem: { padding: '15px', borderBottom: '1px solid #eee' },
+  topicTable: { width: '100%', borderCollapse: 'collapse' },
+  tableHeader: { borderBottom: '2px solid #333', textAlign: 'left', padding: '12px' },
+  tableCell: { borderBottom: '1px solid #eee', padding: '12px' },
 };
 
-// --- Auth Component ---
+// --- Auth Component (from your working code) ---
 function AuthComponent({ onAuth }) {
   const [mode, setMode] = useState('login');
   const [username, setUsername] = useState('');
@@ -71,7 +74,7 @@ function AuthComponent({ onAuth }) {
   );
 }
 
-// --- Analysis Component ---
+// --- Analysis Component (from your working code, with onAnalysisComplete added) ---
 function AnalysisComponent({ auth, onBack, onAnalysisComplete }) {
   const [url, setUrl] = useState('');
   const [result, setResult] = useState(null);
@@ -95,10 +98,7 @@ function AnalysisComponent({ auth, onBack, onAnalysisComplete }) {
   };
 
   return (
-    <div style={styles.card}>
-      <div style={styles.nav}>
-        <button onClick={onBack} style={styles.navButton}>← Back</button>
-      </div>
+    <div style={{...styles.card, padding: 0, boxShadow: 'none', marginTop: 0}}>
       <h2>Analyze New Article</h2>
       <div style={styles.inputContainer}>
         <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://..." style={styles.input}/>
@@ -119,78 +119,85 @@ function AnalysisComponent({ auth, onBack, onAnalysisComplete }) {
               : <p>No keywords available.</p>
             }
           </div>
-          <div style={styles.sectionTitle}>Article Text</div>
-          <div style={{ maxHeight:'300px', overflowY:'auto' }}>
-            {result.article_text ? result.article_text.split('\n\n').map((p,i)=>(<p key={i}>{p}</p>)) : <p>Full article text not available.</p>}
-          </div>
         </div>
       )}
     </div>
   );
 }
-
-// --- Dashboard Component ---
+// --- Dashboard Component (UPDATED with Topic Analysis and Document Frequency) ---
 function DashboardComponent({ auth, key }) {
-  const [dashboardData, setDashboardData] = useState({ loading: true, error: null, articles: [], topicAnalysis: [] });
+  const [dashboardState, setDashboardState] = useState({ loading: true, error: null, articles: [], topicAnalysis: [] });
 
   useEffect(() => {
-    setDashboardData(s => ({ ...s, loading: true }));
+    if (!auth.token) return;
     const fetchData = async () => {
+      setDashboardState({ loading: true, error: null, articles: [], topicAnalysis: [] });
       try {
+        // CORRECTED THE FETCH URL HERE from /topic_analysis to /category_analysis
         const [articlesRes, topicsRes] = await Promise.all([
           fetch('http://127.0.0.1:5000/dashboard', { headers: { 'x-access-token': auth.token } }),
-          fetch('http://127.0.0.1:5000/topic_analysis', { headers: { 'x-access-token': auth.token } })
+          fetch('http://127.0.0.1:5000/category_analysis', { headers: { 'x-access-token': auth.token } })
         ]);
-        if (!articlesRes.ok || !topicsRes.ok) throw new Error("Could not fetch data.");
+        if (!articlesRes.ok || !topicsRes.ok) throw new Error("Could not fetch dashboard data.");
         const articles = await articlesRes.json();
         const topicAnalysis = await topicsRes.json();
-        setDashboardData({ loading: false, error: null, articles: articles || [], topicAnalysis: topicAnalysis || [] });
+        // The variable name 'topicAnalysis' is fine to keep, it is descriptive
+        setDashboardState({ loading: false, error: null, articles: articles || [], topicAnalysis: topicAnalysis || [] });
       } catch (err) {
-        setDashboardData({ loading: false, error: err.message, articles: [], topicAnalysis: [] });
+        setDashboardState({ loading: false, error: err.message, articles: [], topicAnalysis: [] });
       }
     };
     fetchData();
   }, [auth.token, key]);
+  
+  const wordCloudData = useMemo(() => {
+    if (!dashboardState.articles || dashboardState.articles.length === 0) return [];
+    const docFrequency = {};
+    dashboardState.articles.forEach(article => {
+        const uniqueKeywords = new Set(article.keywords || []);
+        uniqueKeywords.forEach(keyword => {
+            docFrequency[keyword] = (docFrequency[keyword] || 0) + 1;
+        });
+    });
+    return Object.entries(docFrequency).sort((a,b) => b[1] - a[1]);
+  }, [dashboardState.articles]);
 
-  if (dashboardData.loading) return <div style={styles.card}>Loading...</div>;
-  if (dashboardData.error) return <div style={styles.card}><div style={styles.errorText}>{dashboardData.error}</div></div>;
+  if (dashboardState.loading) return <div>Loading...</div>;
+  if (dashboardState.error) return <div style={styles.errorText}>Error: {dashboardState.error}</div>;
 
   return (
-    <div style={styles.card}>
+    <div>
       <h2 style={styles.title}>Your Information Diet</h2>
-      
-      <div style={styles.sectionTitle}>Topic Sentiments</div>
-      <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-        <table style={styles.topicTable}>
-          <thead>
-            <tr>
-              <th style={styles.tableHeader}>Topic</th>
-              <th style={styles.tableHeader}>Articles</th>
-              <th style={styles.tableHeader}>Avg. Sentiment</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dashboardData.topicAnalysis.map((item, i) => (
-              <tr key={i}>
-                <td style={styles.tableCell}>{item.topic}</td>
-                <td style={styles.tableCell}>{item.article_count}</td>
-                <td style={{...styles.tableCell, color: item.average_sentiment > 0.05 ? '#28a745' : item.average_sentiment < -0.05 ? '#dc3545' : 'inherit', fontWeight: 'bold'}}>
-                  {item.average_sentiment.toFixed(2)}
-                </td>
-              </tr>
+      <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px'}}>
+        <div>
+          <h3 style={styles.sectionTitle}>Top Keywords</h3>
+          <div style={styles.wordCloud}>
+            {wordCloudData.slice(0, 20).map(([word, count]) => (
+              <span key={word} style={{...styles.wordItem, fontSize: `${12 + count * 4}px`, opacity: 0.5 + count * 0.1 }}>{word}</span>
             ))}
-          </tbody>
-        </table>
+          </div>
+        </div>
+        <div>
+          <h3 style={styles.sectionTitle}>Topic Sentiments</h3>
+          <div style={{maxHeight: '300px', overflowY: 'auto'}}>
+            <table style={styles.topicTable}>
+                <thead><tr><th style={styles.tableHeader}>Topic</th><th style={styles.tableHeader}>Articles</th><th style={styles.tableHeader}>Avg. Sentiment</th></tr></thead>
+                <tbody>
+                  {/* This part of your code is already correct and will work with the fetched data */}
+                  {dashboardState.topicAnalysis.map((item, i) => (
+                    <tr key={i}>
+                      <td style={styles.tableCell}>{item.category}</td>
+                      <td style={styles.tableCell}>{item.article_count}</td>
+                      <td style={{...styles.tableCell, color: item.average_sentiment > 0.05 ? '#28a745' : item.average_sentiment < -0.05 ? '#dc3545' : 'inherit', fontWeight: 'bold'}}>
+                        {item.average_sentiment.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+            </table>
+          </div>
+        </div>
       </div>
-
-      <div style={styles.sectionTitle}>Reading History</div>
-      <ul style={styles.historyList}>
-        {dashboardData.articles.map((a, i) => (
-          <li key={i} style={styles.historyItem}>
-            <strong>{a.title}</strong> — Score: {typeof a.sentiment === 'number' ? a.sentiment.toFixed(2) : 'N/A'}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
@@ -223,7 +230,7 @@ export default function App() {
         </div>
         {view==='dashboard'
           ? <DashboardComponent auth={auth} key={dashboardKey}/>
-          : <AnalysisComponent auth={auth} onBack={() => setView('dashboard')} onAnalysisComplete={handleAnalysisComplete}/>
+          : <AnalysisComponent auth={auth} onBack={() => setView('dashboard')} onAnalysisComplete={handleAnalysisComplete} />
         }
       </div>
     </div>
