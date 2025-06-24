@@ -125,15 +125,21 @@ function AnalysisComponent({ auth, onBack, onAnalysisComplete }) {
   );
 }
 // --- Dashboard Component (UPDATED with Topic Analysis and Document Frequency) ---
-function DashboardComponent({ auth, key }) {
+// In App.js
+
+// In App.js
+
+function DashboardComponent({ auth, onRefresh, key }) { // Added key back for consistency with your setup
   const [dashboardState, setDashboardState] = useState({ loading: true, error: null, articles: [], topicAnalysis: [] });
+  const [expandedCategory, setExpandedCategory] = useState(null);
+
+  const allCategories = ["Politics", "Technology", "Sports", "Business", "Entertainment", "Science", "Health", "World News", "Lifestyle", "Crime", "Other"];
 
   useEffect(() => {
     if (!auth.token) return;
     const fetchData = async () => {
-      setDashboardState({ loading: true, error: null, articles: [], topicAnalysis: [] });
+      setDashboardState(s => ({ ...s, loading: true }));
       try {
-        // CORRECTED THE FETCH URL HERE from /topic_analysis to /category_analysis
         const [articlesRes, topicsRes] = await Promise.all([
           fetch('http://127.0.0.1:5000/dashboard', { headers: { 'x-access-token': auth.token } }),
           fetch('http://127.0.0.1:5000/category_analysis', { headers: { 'x-access-token': auth.token } })
@@ -141,23 +147,39 @@ function DashboardComponent({ auth, key }) {
         if (!articlesRes.ok || !topicsRes.ok) throw new Error("Could not fetch dashboard data.");
         const articles = await articlesRes.json();
         const topicAnalysis = await topicsRes.json();
-        // The variable name 'topicAnalysis' is fine to keep, it is descriptive
         setDashboardState({ loading: false, error: null, articles: articles || [], topicAnalysis: topicAnalysis || [] });
       } catch (err) {
         setDashboardState({ loading: false, error: err.message, articles: [], topicAnalysis: [] });
       }
     };
     fetchData();
-  }, [auth.token, key]);
-  
+  }, [auth.token, key]); // Changed dependency back to 'key' to match App component
+
+  const handleMoveArticle = async (articleId, newCategory) => {
+    try {
+      const res = await fetch('http://127.0.0.1:5000/move_article', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-access-token': auth.token },
+        body: JSON.stringify({ article_id: articleId, new_category: newCategory })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to move article');
+      
+      if(onRefresh) onRefresh();
+
+    } catch (err) {
+      console.error("Move article error:", err);
+    }
+  };
+
   const wordCloudData = useMemo(() => {
     if (!dashboardState.articles || dashboardState.articles.length === 0) return [];
     const docFrequency = {};
     dashboardState.articles.forEach(article => {
-        const uniqueKeywords = new Set(article.keywords || []);
-        uniqueKeywords.forEach(keyword => {
-            docFrequency[keyword] = (docFrequency[keyword] || 0) + 1;
-        });
+      const uniqueKeywords = new Set(article.keywords || []);
+      uniqueKeywords.forEach(keyword => {
+        docFrequency[keyword] = (docFrequency[keyword] || 0) + 1;
+      });
     });
     return Object.entries(docFrequency).sort((a,b) => b[1] - a[1]);
   }, [dashboardState.articles]);
@@ -171,6 +193,7 @@ function DashboardComponent({ auth, key }) {
       <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px'}}>
         <div>
           <h3 style={styles.sectionTitle}>Top Keywords</h3>
+          {/* --- THIS IS THE RESTORED CODE BLOCK --- */}
           <div style={styles.wordCloud}>
             {wordCloudData.slice(0, 20).map(([word, count]) => (
               <span key={word} style={{...styles.wordItem, fontSize: `${12 + count * 4}px`, opacity: 0.5 + count * 0.1 }}>{word}</span>
@@ -181,19 +204,52 @@ function DashboardComponent({ auth, key }) {
           <h3 style={styles.sectionTitle}>Topic Sentiments</h3>
           <div style={{maxHeight: '300px', overflowY: 'auto'}}>
             <table style={styles.topicTable}>
-                <thead><tr><th style={styles.tableHeader}>Topic</th><th style={styles.tableHeader}>Articles</th><th style={styles.tableHeader}>Avg. Sentiment</th></tr></thead>
-                <tbody>
-                  {/* This part of your code is already correct and will work with the fetched data */}
-                  {dashboardState.topicAnalysis.map((item, i) => (
-                    <tr key={i}>
+              <thead>
+                <tr>
+                  <th style={styles.tableHeader}>Topic</th>
+                  <th style={styles.tableHeader}>Articles</th>
+                  <th style={styles.tableHeader}>Avg. Sentiment</th>
+                  <th style={styles.tableHeader}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dashboardState.topicAnalysis.map((item, i) => (
+                  <React.Fragment key={i}>
+                    <tr>
                       <td style={styles.tableCell}>{item.category}</td>
                       <td style={styles.tableCell}>{item.article_count}</td>
                       <td style={{...styles.tableCell, color: item.average_sentiment > 0.05 ? '#28a745' : item.average_sentiment < -0.05 ? '#dc3545' : 'inherit', fontWeight: 'bold'}}>
                         {item.average_sentiment.toFixed(2)}
                       </td>
+                      <td style={styles.tableCell}>
+                        <button onClick={() => setExpandedCategory(expandedCategory === item.category ? null : item.category)} style={{...styles.button, padding: '5px 10px', fontSize: '12px'}}>
+                          {expandedCategory === item.category ? 'Hide' : 'View'}
+                        </button>
+                      </td>
                     </tr>
-                  ))}
-                </tbody>
+                    {expandedCategory === item.category && (
+                      <tr>
+                        <td colSpan="4" style={{ padding: '15px', background: '#f9f9f9' }}>
+                          {dashboardState.articles.filter(a => a.category === item.category).map(article => (
+                            <div key={article.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #eee' }}>
+                              <span style={{ flex: '1', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginRight: '15px' }}>
+                                {article.title} (Sentiment: {article.sentiment.toFixed(2)})
+                              </span>
+                              <select 
+                                value={article.category} 
+                                onChange={(e) => handleMoveArticle(article.id, e.target.value)}
+                                style={{ padding: '5px', borderRadius: '4px' }}
+                              >
+                                {allCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                              </select>
+                            </div>
+                          ))}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
             </table>
           </div>
         </div>
@@ -202,7 +258,9 @@ function DashboardComponent({ auth, key }) {
   );
 }
 
-// --- Main App ---
+
+// You also need to adjust the main App component to pass the props correctly as I had them before.
+// I've simplified it back to what you had originally which works fine.
 export default function App() {
   const [auth, setAuth] = useState(null);
   const [view, setView] = useState('dashboard');
@@ -229,7 +287,7 @@ export default function App() {
           <button onClick={() => { setAuth(null); sessionStorage.clear(); }} style={{ ...styles.navButton, marginLeft: 'auto' }}>Logout</button>
         </div>
         {view==='dashboard'
-          ? <DashboardComponent auth={auth} key={dashboardKey}/>
+          ? <DashboardComponent auth={auth} key={dashboardKey} onRefresh={handleAnalysisComplete}/>
           : <AnalysisComponent auth={auth} onBack={() => setView('dashboard')} onAnalysisComplete={handleAnalysisComplete} />
         }
       </div>
