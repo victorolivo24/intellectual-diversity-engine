@@ -19,8 +19,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 /**
- * Renders the HTML for the login form into the container.
- * @param {HTMLElement} container The element to inject the HTML into.
+* @param {HTMLElement} container The element to inject the HTML into.
  */
 function renderLoginForm(container) {
     container.innerHTML = `
@@ -38,9 +37,44 @@ function renderLoginForm(container) {
             <div id="error-message" class="error-message"></div>
         </form>
     `;
-    // We will add the logic for this form in the next step
-}
 
+    // --- NEW CODE STARTS HERE ---
+    const loginForm = document.getElementById('login-form');
+    const errorMessageDiv = document.getElementById('error-message');
+
+    loginForm.addEventListener('submit', function(e) {
+        e.preventDefault(); // Prevent the form from reloading the popup
+
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        
+        // Send the login request to the backend
+        fetch(API_URL + '/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        })
+        .then(response => {
+            if (!response.ok) {
+                // If response is not 2xx, parse the error message from the backend
+                return response.json().then(err => { throw new Error(err.message) });
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Login was successful!
+            // Save the token and username to the extension's storage
+            chrome.storage.sync.set({ token: data.token, username: data.username }, function() {
+                // Now that the token is saved, show the main analysis view
+                renderAnalysisView(container, data.username);
+            });
+        })
+        .catch(error => {
+            // Display any errors (e.g., "Invalid credentials") to the user
+            errorMessageDiv.textContent = error.message;
+        });
+    });
+}
 /**
  * Renders the main view for a logged-in user.
  * @param {HTMLElement} container The element to inject the HTML into.
