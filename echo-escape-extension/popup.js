@@ -80,12 +80,19 @@ function renderLoginForm(container) {
  * @param {HTMLElement} container The element to inject the HTML into.
  * @param {string} username The user's username.
  */
-function renderAnalysisView(container, username) {
+function renderResults(container, data) {
+    // Create a list of keywords
+    const keywordsHtml = data.keywords.map(kw => `<li>${kw}</li>`).join('');
+
     container.innerHTML = `
-        <h3>Welcome, ${username}!</h3>
-        <p>Click the button below to analyze the article on the current page.</p>
-        <button id="analyze-button" class="button">Analyze Page</button>
-        <div id="results-container"></div>
+        <h4>Analysis for: ${data.title}</h4>
+        <div class="result-item">
+            <strong>Sentiment Score:</strong>
+            <span>${data.sentiment.toFixed(2)}</span>
+        </div>
+        <div class="result-item">
+            <strong>Keywords:</strong>
+            <ul>${keywordsHtml}</ul>
+        </div>
     `;
-    // We will add logic for this button later
 }
