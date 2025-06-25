@@ -91,7 +91,7 @@ function renderAnalysisView(container, username) {
         e.preventDefault();
         handleLogout(container);
     });
-    // In popup.js, inside renderAnalysisView()
+   
 
     document.getElementById('dashboard-link').addEventListener('click', (e) => {
         e.preventDefault();

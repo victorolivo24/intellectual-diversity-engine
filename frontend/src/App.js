@@ -13,11 +13,43 @@ export default function App() {
   const [view, setView] = useState('dashboard');
   const [dashboardKey, setDashboardKey] = useState(0);
 
-  useEffect(() => {
-    const token = sessionStorage.getItem('token');
-    const username = sessionStorage.getItem('username');
-    if (token && username) setAuth({ token, username });
-  }, []);
+ // In App.js
+
+useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ssoTicket = params.get('sso_ticket');
+
+    if (ssoTicket) {
+      // If a one-time ticket is in the URL, redeem it
+      fetch('http://127.0.0.1:5000/redeem_sso_ticket', { // Your API_URL
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sso_ticket: ssoTicket })
+      })
+      .then(res => res.json())
+      .then(data => {
+          if (data.token) {
+              // We got a real token back! Log the user in.
+              sessionStorage.setItem('token', data.token);
+              sessionStorage.setItem('username', data.username);
+              setAuth({ token: data.token, username: data.username });
+          }
+          // Clean the URL to remove the one-time ticket
+          window.history.replaceState({}, document.title, window.location.pathname);
+      })
+      .catch(err => {
+        console.error(err);
+        window.history.replaceState({}, document.title, window.location.pathname);
+      });
+    } else {
+      // If no ticket, check for an existing session as usual
+      const storedToken = sessionStorage.getItem('token');
+      const storedUsername = sessionStorage.getItem('username');
+      if (storedToken && storedUsername) {
+        setAuth({ token: storedToken, username: storedUsername });
+      }
+    }
+}, []);
 
   const handleAnalysisComplete = () => {
     setDashboardKey(k => k + 1);
