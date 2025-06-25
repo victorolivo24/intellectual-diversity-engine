@@ -5,13 +5,13 @@ const API_URL = 'http://127.0.0.1:5000';
 const DASHBOARD_URL = 'http://localhost:3000'; // Or whatever your local React dev server is
 
 // This is the main function that runs when the popup is opened
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     const rootContainer = document.getElementById('root-container');
     checkAuthState(rootContainer);
 });
 
 function checkAuthState(container) {
-    chrome.storage.sync.get(['token', 'username'], function(result) {
+    chrome.storage.sync.get(['token', 'username'], function (result) {
         if (result.token && result.username) {
             renderAnalysisView(container, result.username);
         } else {
@@ -39,7 +39,7 @@ function renderLoginForm(container) {
         </form>
         <p class="auth-switch">Don't have an account? <a href="#" id="show-register">Register</a></p>
     `;
-    
+
     document.getElementById('auth-form').addEventListener('submit', (e) => handleAuth('login', container, e));
     document.getElementById('show-register').addEventListener('click', (e) => {
         e.preventDefault();
@@ -85,15 +85,36 @@ function renderAnalysisView(container, username) {
             <a href="#" id="dashboard-link">View Full Dashboard</a>
         </div>
     `;
-    
+
     document.getElementById('analyze-button').addEventListener('click', () => handleAnalysis());
     document.getElementById('logout-button').addEventListener('click', (e) => {
         e.preventDefault();
         handleLogout(container);
     });
+    // In popup.js, inside renderAnalysisView()
+
     document.getElementById('dashboard-link').addEventListener('click', (e) => {
         e.preventDefault();
-        chrome.tabs.create({ url: DASHBOARD_URL });
+
+        // Get the main login token to prove who we are
+        chrome.storage.sync.get(['token'], function (result) {
+            if (result.token) {
+                // Ask the backend to generate a special, one-time ticket
+                fetch(`${API_URL}/generate_sso_ticket`, {
+                    method: 'POST',
+                    headers: { 'x-access-token': result.token }
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.sso_ticket) {
+                            // Open the dashboard URL with the SAFE, single-use ticket
+                            const urlWithTicket = `${DASHBOARD_URL}?sso_ticket=${data.sso_ticket}`;
+                            chrome.tabs.create({ url: urlWithTicket });
+                        }
+                    })
+                    .catch(err => console.error(err));
+            }
+        });
     });
 }
 
@@ -129,7 +150,7 @@ function handleAuth(mode, container, e) {
     const password = document.getElementById('password').value;
     const errorMessageDiv = document.getElementById('error-message');
     const submitButton = e.target.querySelector('button');
-    
+
     errorMessageDiv.textContent = '';
     submitButton.textContent = '...';
     submitButton.disabled = true;
@@ -139,40 +160,40 @@ function handleAuth(mode, container, e) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
     })
-    .then(response => {
-        if (!response.ok) {
-            return response.json().then(err => { throw new Error(err.message || 'An error occurred.') });
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (mode === 'login') {
-            chrome.storage.sync.set({ token: data.token, username: data.username }, () => {
-                checkAuthState(container);
-            });
-        } else {
-            errorMessageDiv.style.color = 'green';
-            errorMessageDiv.textContent = 'Registration successful! Please log in.';
-        }
-    })
-    .catch(error => {
-        errorMessageDiv.style.color = '#fa383e';
-        errorMessageDiv.textContent = error.message;
-    })
-    .finally(() => {
-        submitButton.textContent = mode.charAt(0).toUpperCase() + mode.slice(1); // Reset button text
-        submitButton.disabled = false;
-    });
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw new Error(err.message || 'An error occurred.') });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (mode === 'login') {
+                chrome.storage.sync.set({ token: data.token, username: data.username }, () => {
+                    checkAuthState(container);
+                });
+            } else {
+                errorMessageDiv.style.color = 'green';
+                errorMessageDiv.textContent = 'Registration successful! Please log in.';
+            }
+        })
+        .catch(error => {
+            errorMessageDiv.style.color = '#fa383e';
+            errorMessageDiv.textContent = error.message;
+        })
+        .finally(() => {
+            submitButton.textContent = mode.charAt(0).toUpperCase() + mode.slice(1); // Reset button text
+            submitButton.disabled = false;
+        });
 }
 
 function handleAnalysis() {
     const analyzeButton = document.getElementById('analyze-button');
     const resultsContainer = document.getElementById('results-container');
-    
+
     resultsContainer.innerHTML = 'Analyzing...';
     analyzeButton.textContent = 'Analyzing...';
     analyzeButton.disabled = true;
-    
+
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const currentTab = tabs[0];
         if (!currentTab || !currentTab.url) {
@@ -180,7 +201,7 @@ function handleAnalysis() {
             return;
         }
 
-        chrome.storage.sync.get(['token'], function(result) {
+        chrome.storage.sync.get(['token'], function (result) {
             if (!result.token) {
                 resultsContainer.innerHTML = '<div class="error-message">Error: Not logged in.</div>';
                 return;
@@ -194,26 +215,26 @@ function handleAnalysis() {
                 },
                 body: JSON.stringify({ url: currentTab.url })
             })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(err => { throw new Error(err.message || 'Analysis failed.') });
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.data) {
-                    renderResults(resultsContainer, data.data);
-                } else {
-                    throw new Error(data.message || 'Invalid data received.');
-                }
-            })
-            .catch(error => {
-                resultsContainer.innerHTML = `<div class="error-message">${error.message}</div>`;
-            })
-            .finally(() => {
-                analyzeButton.textContent = 'Analyze Page';
-                analyzeButton.disabled = false;
-            });
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw new Error(err.message || 'Analysis failed.') });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.data) {
+                        renderResults(resultsContainer, data.data);
+                    } else {
+                        throw new Error(data.message || 'Invalid data received.');
+                    }
+                })
+                .catch(error => {
+                    resultsContainer.innerHTML = `<div class="error-message">${error.message}</div>`;
+                })
+                .finally(() => {
+                    analyzeButton.textContent = 'Analyze Page';
+                    analyzeButton.disabled = false;
+                });
         });
     });
 }
