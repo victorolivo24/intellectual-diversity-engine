@@ -14,6 +14,8 @@ import jwt
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+import secrets
+from datetime import timedelta
 
 # 2. Initial Setup
 load_dotenv()
@@ -25,7 +27,7 @@ app.config['GEMINI_API_KEY'] = os.getenv('GEMINI_API_KEY')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# 3. Database Models - Added 'category' column
+# 3. Database Models
 reading_list = db.Table('reading_list',
     db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
     db.Column('article_id', db.Integer, db.ForeignKey('article.id'), primary_key=True)
@@ -40,6 +42,12 @@ class Article(db.Model):
     id = db.Column(db.Integer, primary_key=True); url = db.Column(db.String(500), unique=True, nullable=False); title = db.Column(db.String(500), nullable=False); article_text = db.Column(db.Text, nullable=False); retrieved_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.datetime.now(datetime.UTC)); sentiment_score = db.Column(db.Float, nullable=True); keywords = db.Column(db.JSON, nullable=True);
     category = db.Column(db.String(50), nullable=True) # NEW COLUMN
 
+class SsoTicket(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ticket = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    is_used = db.Column(db.Boolean, default=False, nullable=False)
 # 4. Token Decorator (no changes)
 def token_required(f):
     @wraps(f)
