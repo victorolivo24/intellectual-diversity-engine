@@ -94,3 +94,57 @@ input[type="password"] {
     text-decoration: none;
     font-weight: bold;
 }
+/* Add to the bottom of popup.css */
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    font-size: 13px;
+}
+
+.header span {
+    font-weight: bold;
+}
+
+.header a {
+    font-size: 12px;
+    color: #1877f2;
+    text-decoration: none;
+}
+
+.footer {
+    margin-top: 20px;
+    text-align: center;
+    border-top: 1px solid #eee;
+    padding-top: 10px;
+}
+
+.footer a {
+    color: #1877f2;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 13px;
+}
+
+/* Updated Keyword Styles */
+.keywords-list {
+    list-style-type: none;
+    padding-left: 0;
+    margin: 5px 0 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.keyword-pill {
+    background-color: #e4e6eb;
+    padding: 3px 8px;
+    border-radius: 15px;
+    font-size: 12px;
+}
+
+.sentiment-score {
+    font-weight: bold;
+}
