@@ -54,7 +54,7 @@ class SsoTicket(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False)
     is_used = db.Column(db.Boolean, default=False, nullable=False)
-# 4. Token Decorator (no changes)
+# 4. Token Decorator
 
 
 def token_required(f):
