@@ -217,56 +217,6 @@ def category_analysis(current_user):
     analysis_results.sort(key=lambda x: (-x['article_count'], x['category']))
     return jsonify(analysis_results)
 
-
-@app.route('/analyze', methods=['POST'])
-@token_required
-def analyze(current_user):
-    url = request.get_json().get('url')
-    if not url: return jsonify({'message': 'URL is required'}), 400
-
-    existing = Article.query.filter_by(url=url).first()
-    if existing:
-        if existing not in current_user.articles:
-            current_user.articles.append(existing); db.session.commit()
-        return jsonify({'message': 'Article added to history', 'data': {'title': existing.title, 'sentiment': existing.sentiment_score, 'keywords': existing.keywords, 'category': existing.category, 'article_text': existing.article_text }})
-
-    try:
-        html = get_html(url)
-        if not html: raise ValueError("Could not retrieve HTML.")
-        soup = BeautifulSoup(html, 'html.parser')
-        
-        title = soup.find('title').get_text(strip=True) or "No Title"
-        text = extract_article_text(soup)
-        if not text: raise ValueError("Could not extract meaningful text.")
-        
-        sentiment, keywords, category = get_ai_analysis(text)
-        
-        new_article = Article(url=url, title=title, article_text=text, sentiment_score=sentiment, keywords=keywords, category=category)
-        db.session.add(new_article); current_user.articles.append(new_article); db.session.commit()
-        
-        return jsonify({'message': 'Article analyzed', 'data': {'title': title, 'sentiment': sentiment, 'keywords': keywords, 'category': category, 'article_text': text}})
-    except Exception as e:
-        db.session.rollback(); return jsonify({'message': str(e)}), 500
-
-@app.route('/generate_sso_ticket', methods=['POST'])
-@token_required
-def generate_sso_ticket(current_user):
-    """Generates a secure, single-use ticket for a logged-in user."""
-    ticket_string = secrets.token_urlsafe(32)
-    # Use utcnow() to create a naive datetime object in UTC
-    expiration = datetime.utcnow() + timedelta(seconds=60)
-    
-    new_ticket = SsoTicket(
-        ticket=ticket_string,
-        user_id=current_user.id,
-        expires_at=expiration
-    )
-    db.session.add(new_ticket)
-    db.session.commit()
-    
-    return jsonify({'sso_ticket': ticket_string})
-
-
 DEFAULT_TOPICS = ["Politics", "Technology", "Sports", "Business", "Entertainment", "Science", "Health", "World News", "Lifestyle", "Crime", "Other"]
 
 @app.route('/topics', methods=['GET'])
@@ -320,6 +270,56 @@ def delete_topic(current_user, topic_name):
     db.session.delete(topic_to_delete)
     db.session.commit()
     return jsonify({'message': 'Topic deleted successfully'})
+
+
+@app.route('/analyze', methods=['POST'])
+@token_required
+def analyze(current_user):
+    url = request.get_json().get('url')
+    if not url: return jsonify({'message': 'URL is required'}), 400
+
+    existing = Article.query.filter_by(url=url).first()
+    if existing:
+        if existing not in current_user.articles:
+            current_user.articles.append(existing); db.session.commit()
+        return jsonify({'message': 'Article added to history', 'data': {'title': existing.title, 'sentiment': existing.sentiment_score, 'keywords': existing.keywords, 'category': existing.category, 'article_text': existing.article_text }})
+
+    try:
+        html = get_html(url)
+        if not html: raise ValueError("Could not retrieve HTML.")
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        title = soup.find('title').get_text(strip=True) or "No Title"
+        text = extract_article_text(soup)
+        if not text: raise ValueError("Could not extract meaningful text.")
+        
+        sentiment, keywords, category = get_ai_analysis(text)
+        
+        new_article = Article(url=url, title=title, article_text=text, sentiment_score=sentiment, keywords=keywords, category=category)
+        db.session.add(new_article); current_user.articles.append(new_article); db.session.commit()
+        
+        return jsonify({'message': 'Article analyzed', 'data': {'title': title, 'sentiment': sentiment, 'keywords': keywords, 'category': category, 'article_text': text}})
+    except Exception as e:
+        db.session.rollback(); return jsonify({'message': str(e)}), 500
+
+@app.route('/generate_sso_ticket', methods=['POST'])
+@token_required
+def generate_sso_ticket(current_user):
+    """Generates a secure, single-use ticket for a logged-in user."""
+    ticket_string = secrets.token_urlsafe(32)
+    # Use utcnow() to create a naive datetime object in UTC
+    expiration = datetime.utcnow() + timedelta(seconds=60)
+    
+    new_ticket = SsoTicket(
+        ticket=ticket_string,
+        user_id=current_user.id,
+        expires_at=expiration
+    )
+    db.session.add(new_ticket)
+    db.session.commit()
+    
+    return jsonify({'sso_ticket': ticket_string})
+
 
 @app.route('/redeem_sso_ticket', methods=['POST'])
 def redeem_sso_ticket():
