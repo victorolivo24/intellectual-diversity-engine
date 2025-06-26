@@ -39,8 +39,14 @@ class User(db.Model):
     def check_password(self, password): return check_password_hash(self.password_hash, password)
 
 class Article(db.Model):
-    id = db.Column(db.Integer, primary_key=True); url = db.Column(db.String(500), unique=True, nullable=False); title = db.Column(db.String(500), nullable=False); article_text = db.Column(db.Text, nullable=False); retrieved_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.datetime.now(datetime.UTC)); sentiment_score = db.Column(db.Float, nullable=True); keywords = db.Column(db.JSON, nullable=True);
-    category = db.Column(db.String(50), nullable=True) # NEW COLUMN
+    id = db.Column(db.Integer, primary_key=True)
+    url = db.Column(db.String(500), unique=True, nullable=False)
+    title = db.Column(db.String(500), nullable=False)
+    article_text = db.Column(db.Text, nullable=False)
+    retrieved_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    sentiment_score = db.Column(db.Float, nullable=True) 
+    keywords = db.Column(db.JSON, nullable=True)      
+    category = db.Column(db.String(50), nullable=True)
 
 class SsoTicket(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -158,7 +164,7 @@ def login():
     data = request.get_json(); u, p = data.get('username'), data.get('password')
     user = User.query.filter_by(username=u).first()
     if not user or not user.check_password(p): return jsonify({'message': 'Invalid credentials'}), 401
-    token = jwt.encode({'id': user.id, 'exp': datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=24)}, app.config['SECRET_KEY'], "HS256")
+    token = jwt.encode({'id': user.id, 'exp': datetime.utcnow() + timedelta(hours=24)}, app.config['SECRET_KEY'], "HS256")
     return jsonify({'token': token, 'username': user.username})
 
 @app.route('/dashboard', methods=['GET'])
