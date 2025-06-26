@@ -54,9 +54,14 @@ class SsoTicket(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False)
     is_used = db.Column(db.Boolean, default=False, nullable=False)
+
+class UserTopic(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    __table_args__ = (db.UniqueConstraint('name', 'user_id', name='_user_topic_uc'),)
+
 # 4. Token Decorator
-
-
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
