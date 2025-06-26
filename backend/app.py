@@ -1,5 +1,5 @@
 # 1. All import statements
-import datetime, json, os, re
+import datetime, json, os, re, time
 from collections import Counter, defaultdict
 from functools import wraps
 import requests
@@ -15,7 +15,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 import secrets
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 
 # 2. Initial Setup
 load_dotenv()
@@ -49,30 +49,64 @@ class SsoTicket(db.Model):
     expires_at = db.Column(db.DateTime, nullable=False)
     is_used = db.Column(db.Boolean, default=False, nullable=False)
 # 4. Token Decorator (no changes)
+
+
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         token = request.headers.get('x-access-token')
         if not token: return jsonify({'message': 'Token is missing!'}), 401
         try:
-            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"]); current_user = User.query.get(data['id'])
+            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            # Use the modern db.session.get() here as well
+            current_user = db.session.get(User, data['id']) 
         except: return jsonify({'message': 'Token is invalid!'}), 401
         return f(current_user, *args, **kwargs)
     return decorated
 
-# 5. Helper Functions
+
+
 def get_html(url):
+    """
+    Attempts to get HTML with a simple request first. If the content is too short
+    (indicating a paywall or JS-loaded page), it falls back to using Selenium.
+    """
     try:
+        # First attempt with simple requests
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36'}
-        response = requests.get(url, headers=headers, timeout=15); response.raise_for_status()
-        return response.text
-    except requests.RequestException:
-        driver = None;
-        try:
-            chrome_options = Options(); chrome_options.add_argument("--headless"); chrome_options.add_argument("--no-sandbox"); chrome_options.add_argument("--disable-dev-shm-usage")
-            driver = webdriver.Chrome(service=Service(), options=chrome_options); driver.get(url); return driver.page_source
-        finally:
-            if driver: driver.quit()
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        
+        # Check if the content is substantial enough
+        temp_soup = BeautifulSoup(response.text, 'html.parser')
+        temp_text = extract_article_text(temp_soup)
+        print(f"--- Text content length from simple request: {len(temp_text)} ---")
+        
+        if len(temp_text) > 500: # We consider >500 characters a successful scrape
+            print("--- Simple request successful with enough content. ---")
+            return response.text
+        
+        print("--- Simple request got insufficient text. Falling back to Selenium. ---")
+
+    except requests.RequestException as e:
+        print(f"--- Simple request failed: {e}. Falling back to Selenium. ---")
+
+    # Fallback to Selenium if the simple request fails OR returns too little content
+    driver = None
+    try:
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        
+        print("--- Launching Selenium to get full page source. ---")
+        driver = webdriver.Chrome(service=Service(), options=chrome_options)
+        driver.get(url)
+        time.sleep(3) # Wait 3 seconds for JavaScript to load content
+        return driver.page_source
+    finally:
+        if driver:
+            driver.quit()
 
 def extract_article_text(soup):
     for tag in ['script', 'style', 'header', 'footer', 'nav', 'aside']:
@@ -193,7 +227,7 @@ def analyze(current_user):
         title = soup.find('title').get_text(strip=True) or "No Title"
         text = extract_article_text(soup)
         if not text: raise ValueError("Could not extract meaningful text.")
-
+        
         sentiment, keywords, category = get_ai_analysis(text)
         
         new_article = Article(url=url, title=title, article_text=text, sentiment_score=sentiment, keywords=keywords, category=category)
@@ -203,7 +237,59 @@ def analyze(current_user):
     except Exception as e:
         db.session.rollback(); return jsonify({'message': str(e)}), 500
 
-# In app.py
+@app.route('/generate_sso_ticket', methods=['POST'])
+@token_required
+def generate_sso_ticket(current_user):
+    """Generates a secure, single-use ticket for a logged-in user."""
+    ticket_string = secrets.token_urlsafe(32)
+    # Use utcnow() to create a naive datetime object in UTC
+    expiration = datetime.utcnow() + timedelta(seconds=60)
+    
+    new_ticket = SsoTicket(
+        ticket=ticket_string,
+        user_id=current_user.id,
+        expires_at=expiration
+    )
+    db.session.add(new_ticket)
+    db.session.commit()
+    
+    return jsonify({'sso_ticket': ticket_string})
+
+
+
+
+@app.route('/redeem_sso_ticket', methods=['POST'])
+def redeem_sso_ticket():
+    """Redeems a single-use ticket and returns a full JWT session token."""
+    data = request.get_json()
+    ticket_string = data.get('sso_ticket')
+
+    if not ticket_string:
+        return jsonify({'message': 'Ticket is missing'}), 400
+
+    sso_ticket = SsoTicket.query.filter_by(ticket=ticket_string).first()
+    
+    # Use utcnow() for simple, naive UTC datetime comparison
+    if not sso_ticket or sso_ticket.is_used or sso_ticket.expires_at < datetime.utcnow():
+        return jsonify({'message': 'Invalid or expired ticket'}), 401
+    
+    # Mark ticket as used
+    sso_ticket.is_used = True
+    
+    # Use the modern db.session.get() to avoid the legacy warning
+    user = db.session.get(User, sso_ticket.user_id) 
+
+    # --- THIS IS THE LINE WE ARE FIXING ---
+    # Removed the incorrect 'datetime.' prefix before 'timedelta'
+    token = jwt.encode(
+        {'id': user.id, 'exp': datetime.utcnow() + timedelta(hours=24)},
+        app.config['SECRET_KEY'],
+        "HS256"
+    )
+    
+    db.session.commit()
+
+    return jsonify({'token': token, 'username': user.username})
 
 @app.route('/source_analysis', methods=['GET'])
 @token_required
@@ -250,4 +336,4 @@ def sentiment_timeline(current_user):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(port=5000)
+    app.run(port=5000,debug=True)
