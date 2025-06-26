@@ -267,7 +267,59 @@ def generate_sso_ticket(current_user):
     return jsonify({'sso_ticket': ticket_string})
 
 
+DEFAULT_TOPICS = ["Politics", "Technology", "Sports", "Business", "Entertainment", "Science", "Health", "World News", "Lifestyle", "Crime", "Other"]
 
+@app.route('/topics', methods=['GET'])
+@token_required
+def get_topics(current_user):
+    """Gets the full list of default and user-created topics."""
+    custom_topics = [topic.name for topic in UserTopic.query.filter_by(user_id=current_user.id).all()]
+    return jsonify({
+        'default_topics': DEFAULT_TOPICS,
+        'custom_topics': sorted(custom_topics)
+    })
+
+@app.route('/topics', methods=['POST'])
+@token_required
+def create_topic(current_user):
+    """Creates a new custom topic for the user."""
+    data = request.get_json()
+    new_topic_name = data.get('name', '').strip()
+
+    if not new_topic_name:
+        return jsonify({'message': 'Topic name cannot be empty'}), 400
+    if len(new_topic_name) > 50:
+        return jsonify({'message': 'Topic name is too long'}), 400
+
+    # Check if topic already exists (either as a default or custom topic)
+    existing_custom = UserTopic.query.filter_by(user_id=current_user.id, name=new_topic_name).first()
+    if new_topic_name in DEFAULT_TOPICS or existing_custom:
+        return jsonify({'message': 'Topic already exists'}), 409
+
+    topic = UserTopic(name=new_topic_name, user_id=current_user.id)
+    db.session.add(topic)
+    db.session.commit()
+    return jsonify({'message': 'Topic created successfully'}), 201
+
+@app.route('/topics/<string:topic_name>', methods=['DELETE'])
+@token_required
+def delete_topic(current_user, topic_name):
+    """Deletes a custom topic, only if no articles are assigned to it."""
+    if topic_name in DEFAULT_TOPICS:
+        return jsonify({'message': 'Cannot delete a default topic'}), 403
+
+    topic_to_delete = UserTopic.query.filter_by(user_id=current_user.id, name=topic_name).first()
+    if not topic_to_delete:
+        return jsonify({'message': 'Custom topic not found'}), 404
+
+    # For safety, only allow deleting a topic if no articles are using it
+    articles_in_topic = Article.query.filter(Article.readers.any(id=current_user.id), Article.category == topic_name).first()
+    if articles_in_topic:
+        return jsonify({'message': 'Cannot delete topic. Articles are still assigned to it.'}), 409
+
+    db.session.delete(topic_to_delete)
+    db.session.commit()
+    return jsonify({'message': 'Topic deleted successfully'})
 
 @app.route('/redeem_sso_ticket', methods=['POST'])
 def redeem_sso_ticket():
