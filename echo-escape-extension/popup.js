@@ -245,7 +245,7 @@ function handleAnalysis() {
                 .catch(error => {
                     resultsContainer.innerHTML = `
                         <div class="error-message">
-                            ⚠️ An unexpected error occurred. Please try again later.
+                            ⚠️ There was a network or server error reaching the analysis system. This is not related to the article itself.
                         </div>
                     `;
                 })
