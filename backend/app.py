@@ -336,7 +336,29 @@ def analyze(current_user):
         if not html: raise ValueError("Could not retrieve HTML.")
         soup = BeautifulSoup(html, 'html.parser')
         
-        title = soup.find('title').get_text(strip=True) or "No Title"
+        # 1. Try to get <h1>
+        h1_tag = soup.find("h1")
+        if h1_tag:
+            # If there’s a nested span inside, grab that too
+            span = h1_tag.find("span")
+            if span:
+                title = span.get_text(strip=True)
+            else:
+                title = h1_tag.get_text(strip=True)
+        else:
+            # 2. Fallback to og:title
+            og_title = soup.find("meta", property="og:title")
+            if og_title and og_title.get("content"):
+                title = og_title["content"]
+            else:
+                # 3. Fallback to normal <title>
+                title = soup.find("title").get_text(strip=True) or "No Title"
+
+        # 4. If suspicious fallback
+        if title.lower() in ["subscribe to read", "sign in to continue", "login required"]:
+            snippet = text.strip().split()[:10]
+            title = " ".join(snippet) + "..." if snippet else "No Title"
+
         try:
             text = extract_article_text(soup, url=url)
             print(f"EXTRACTED TEXT LENGTH: {len(text)}")
@@ -344,7 +366,16 @@ def analyze(current_user):
             print(f"ERROR in extract_article_text: {e}")
             raise
 
-        if not text: raise ValueError("Could not extract meaningful text.")
+  
+        if (not text or len(text.strip()) < 50) and title.lower() in [
+        "subscribe to read", "sign in to continue", "login required", "", "access denied"
+                    ]:
+            return jsonify({
+                "message": "This article is blocked by a paywall or security filter and could not be analyzed.",
+                "data": None
+        }), 200
+        if not text:
+            raise ValueError("could not extract meaningful text.")
         
         sentiment, keywords, category = get_ai_analysis(text)
         
