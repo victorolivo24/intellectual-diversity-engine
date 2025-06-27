@@ -119,18 +119,18 @@ function renderAnalysisView(container, username) {
 }
 
 function renderResults(container, data) {
-    const isNYT = data.title.toLowerCase().includes("the new york times") || data.title.toLowerCase().includes("nytimes");
-    const shortArticle = data.article_text && data.article_text.length < 50;
 
-    let articleMessage = "";
-    if (isNYT && shortArticle) {
-        articleMessage = `<div class="warning">⚠️ This is a paywalled article. Only the headline was shown. No sentiment or keywords are available.</div>`;
+    if (data === null) {
         container.innerHTML = `
-            <h4>Analysis for: ${data.title}</h4>
-            ${articleMessage}
+            <div class="error-message">
+                ⚠️ ${message}
+            </div>
         `;
         return;
     }
+
+    
+  
 
     const keywordsHtml = data.keywords.map(kw => `<li class="keyword-pill">${kw}</li>`).join('');
 
@@ -237,14 +237,19 @@ function handleAnalysis() {
                 })
                 .then(data => {
                     if (data.data) {
-                        renderResults(resultsContainer, data.data);
+                        renderResults(resultsContainer, data.data, null);
                     } else {
-                        throw new Error(data.message || 'Invalid data received.');
+                        renderResults(resultsContainer, null, data.message);
                     }
                 })
                 .catch(error => {
-                    resultsContainer.innerHTML = `<div class="error-message">${error.message}</div>`;
+                    resultsContainer.innerHTML = `
+                        <div class="error-message">
+                            ⚠️ An unexpected error occurred. Please try again later.
+                        </div>
+                    `;
                 })
+                
                 .finally(() => {
                     analyzeButton.textContent = 'Analyze Page';
                     analyzeButton.disabled = false;
