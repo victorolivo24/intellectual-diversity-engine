@@ -182,7 +182,7 @@ function handleAuth(mode, container, e) {
         })
         .then(data => {
             if (mode === 'login') {
-                chrome.storage.sync.set({ token: data.token, username: data.username }, () => {
+                chrome.storage.sync.set({ token: data.token, refreshToken: data.refresh_token, username: data.username }, () => {
                     checkAuthState(container);
                 });
             } else {
@@ -231,10 +231,53 @@ function handleAnalysis() {
             })
                 .then(response => {
                     if (!response.ok) {
-                        return response.json().then(err => { throw new Error(err.message || 'Analysis failed.') });
+                        return response.json().then(err => {
+                            if (err.message && err.message.includes("Token is invalid")) {
+                                // try to refresh
+                                chrome.storage.sync.get(['refreshToken'], function (result) {
+                                    if (!result.refreshToken) {
+                                        resultsContainer.innerHTML = `
+                                        <div class="error-message">
+                                            ⚠️ Your session expired, please log in again.
+                                        </div>
+                                    `;
+                                        chrome.storage.sync.remove(['token', 'username']);
+                                        return;
+                                    }
+
+                                    fetch(`${API_URL}/refresh_token`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ refresh_token: result.refreshToken })
+                                    })
+                                        .then(refreshRes => {
+                                            if (!refreshRes.ok) throw new Error("Refresh token invalid");
+                                            return refreshRes.json();
+                                        })
+                                        .then(newData => {
+                                            console.log("✅ refreshed JWT successfully", newData.token);
+                                            chrome.storage.sync.set({ token: newData.token }, () => {
+                                                // retry the original analyze call
+                                                handleAnalysis();
+                                            });
+                                        })
+                                        .catch(() => {
+                                            resultsContainer.innerHTML = `
+                                        <div class="error-message">
+                                            ⚠️ Could not refresh login. Please log in again.
+                                        </div>
+                                    `;
+                                            chrome.storage.sync.remove(['token', 'username']);
+                                        });
+                                });
+                                throw new Error("Retrying with refresh token");
+                            }
+                            throw new Error(err.message || 'Analysis failed.');
+                        });
                     }
                     return response.json();
                 })
+            
                 .then(data => {
                     if (data.data) {
                         renderResults(resultsContainer, data.data, null);
