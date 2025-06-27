@@ -333,58 +333,77 @@ def analyze(current_user):
 
     try:
         html = get_html(url)
-        if not html: raise ValueError("Could not retrieve HTML.")
+        if not html:
+            raise ValueError("Could not retrieve HTML.")
+            
         soup = BeautifulSoup(html, 'html.parser')
         
-        # 1. Try to get <h1>
+        title = None
+        # robust title strategy
         h1_tag = soup.find("h1")
         if h1_tag:
-            # If there’s a nested span inside, grab that too
             span = h1_tag.find("span")
             if span:
                 title = span.get_text(strip=True)
             else:
                 title = h1_tag.get_text(strip=True)
         else:
-            # 2. Fallback to og:title
             og_title = soup.find("meta", property="og:title")
             if og_title and og_title.get("content"):
                 title = og_title["content"]
             else:
-                # 3. Fallback to normal <title>
-                title = soup.find("title").get_text(strip=True) or "No Title"
-
-        # 4. If suspicious fallback
-        if title.lower() in ["subscribe to read", "sign in to continue", "login required"]:
-            snippet = text.strip().split()[:10]
-            title = " ".join(snippet) + "..." if snippet else "No Title"
-
-        try:
-            text = extract_article_text(soup, url=url)
-            print(f"EXTRACTED TEXT LENGTH: {len(text)}")
-        except Exception as e:
-            print(f"ERROR in extract_article_text: {e}")
-            raise
-
-  
-        if (not text or len(text.strip()) < 50) and title.lower() in [
-        "subscribe to read", "sign in to continue", "login required", "", "access denied"
-                    ]:
+                title = soup.find("title").get_text(strip=True) if soup.find("title") else "No Title"
+        
+        text = extract_article_text(soup, url=url)
+        print(f"EXTRACTED TEXT LENGTH: {len(text)}")
+        
+        # final paywall or junk check
+        if (
+            (not text or len(text.strip()) < 50)
+            and title.lower() in ["subscribe to read", "sign in to continue", "login required", "", "access denied"]
+        ):
             return jsonify({
                 "message": "This article is blocked by a paywall or security filter and could not be analyzed.",
                 "data": None
-        }), 200
-        if not text:
-            raise ValueError("could not extract meaningful text.")
-        
+            }), 200
+
+        if not text or len(text.strip()) < 50:
+            return jsonify({
+                "message": "This article could not be analyzed because its content was unavailable or too short.",
+                "data": None
+            }), 200
+
         sentiment, keywords, category = get_ai_analysis(text)
+
+        new_article = Article(
+            url=url,
+            title=title,
+            article_text=text,
+            sentiment_score=sentiment,
+            keywords=keywords,
+            category=category
+        )
+        db.session.add(new_article)
+        current_user.articles.append(new_article)
+        db.session.commit()
         
-        new_article = Article(url=url, title=title, article_text=text, sentiment_score=sentiment, keywords=keywords, category=category)
-        db.session.add(new_article); current_user.articles.append(new_article); db.session.commit()
-        
-        return jsonify({'message': 'Article analyzed', 'data': {'title': title, 'sentiment': sentiment, 'keywords': keywords, 'category': category, 'article_text': text}})
+        return jsonify({
+            "message": "Article analyzed",
+            "data": {
+                "title": title,
+                "sentiment": sentiment,
+                "keywords": keywords,
+                "category": category,
+                "article_text": text
+            }
+        })
+
     except Exception as e:
-        db.session.rollback(); return jsonify({'message': str(e)}), 500
+        print(f"EXCEPTION in /analyze: {e}")
+        return jsonify({
+            "message": "This article could not be analyzed due to a technical issue or heavy paywall restrictions.",
+            "data": None
+        }), 200
 
 @app.route('/generate_sso_ticket', methods=['POST'])
 @token_required
