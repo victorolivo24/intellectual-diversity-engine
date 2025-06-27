@@ -16,6 +16,10 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 import secrets
 from datetime import timedelta, datetime, timezone
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
 
 # 2. Initial Setup
 load_dotenv()
@@ -76,53 +80,96 @@ def token_required(f):
     return decorated
 
 
-
 def get_html(url):
     """
     Attempts to get HTML with a simple request first. If the content is too short
     (indicating a paywall or JS-loaded page), it falls back to using Selenium.
+    For NYT, only returns the HTML for title/meta (due to paywall).
     """
+    domain = urlparse(url).netloc
+
     try:
         # First attempt with simple requests
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36'}
+        headers = {
+            'User-Agent': (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                '(KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36'
+            )
+        }
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
-        
-        # Check if the content is substantial enough
+
         temp_soup = BeautifulSoup(response.text, 'html.parser')
-        temp_text = extract_article_text(temp_soup)
+        temp_text = extract_article_text(temp_soup, url=url)
         print(f"--- Text content length from simple request: {len(temp_text)} ---")
-        
-        if len(temp_text) > 500: # We consider >500 characters a successful scrape
+
+        if len(temp_text) > 500:
             print("--- Simple request successful with enough content. ---")
             return response.text
-        
+
         print("--- Simple request got insufficient text. Falling back to Selenium. ---")
 
     except requests.RequestException as e:
         print(f"--- Simple request failed: {e}. Falling back to Selenium. ---")
 
-    # Fallback to Selenium if the simple request fails OR returns too little content
+    # NYT policy: do not scrape full text
+    if "nytimes.com" in domain:
+        print("--- NYT detected, skipping full scrape and using only title/meta. ---")
+        return response.text  # minimal fallback, reusing requests even if short
+
+    # generic fallback
     driver = None
     try:
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        
-        print("--- Launching Selenium to get full page source. ---")
-        driver = webdriver.Chrome(service=Service(), options=chrome_options)
+        print("--- Launching standard Selenium fallback ---")
+        options = Options()
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        driver = webdriver.Chrome(service=Service(), options=options)
+
         driver.get(url)
-        time.sleep(3) # Wait 3 seconds for JavaScript to load content
-        return driver.page_source
+
+        WebDriverWait(driver, 8).until(
+            EC.presence_of_element_located((
+                By.CSS_SELECTOR,
+                "article"
+            ))
+        )
+
+        # slowly scroll to trigger lazy loading
+        for i in range(0, 5):
+            driver.execute_script(
+                "window.scrollTo(0, document.body.scrollHeight * arguments[0]/5);", i + 1
+            )
+            time.sleep(1)
+
+        page_html = driver.page_source
+        return page_html
+
     finally:
         if driver:
             driver.quit()
 
-def extract_article_text(soup):
-    for tag in ['script', 'style', 'header', 'footer', 'nav', 'aside']:
-        for s in soup.select(tag): s.decompose()
-    return soup.get_text(separator='\n', strip=True)
+
+def extract_article_text(soup, url=None):
+    domain = urlparse(url).netloc if url else ""
+    for tag in ["script", "style", "header", "footer", "nav", "aside"]:
+        for s in soup.select(tag):
+            s.decompose()
+
+    # Special rule for NYT
+    if "nytimes.com" in domain:
+        # only analyze the <title> if NYT
+        title = soup.find("title")
+        return title.get_text(strip=True) if title else "nytimes.com"
+
+    # normal
+    article_tag = soup.find("article")
+    if article_tag:
+        return article_tag.get_text(separator="\n", strip=True)
+
+    return soup.get_text(separator="\n", strip=True)
+
 
 # --- UPDATED: Gemini AI Analysis Function ---
 def get_ai_analysis(text):
@@ -290,7 +337,13 @@ def analyze(current_user):
         soup = BeautifulSoup(html, 'html.parser')
         
         title = soup.find('title').get_text(strip=True) or "No Title"
-        text = extract_article_text(soup)
+        try:
+            text = extract_article_text(soup, url=url)
+            print(f"EXTRACTED TEXT LENGTH: {len(text)}")
+        except Exception as e:
+            print(f"ERROR in extract_article_text: {e}")
+            raise
+
         if not text: raise ValueError("Could not extract meaningful text.")
         
         sentiment, keywords, category = get_ai_analysis(text)
