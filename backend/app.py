@@ -39,6 +39,7 @@ reading_list = db.Table('reading_list',
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True); username = db.Column(db.String(80), unique=True, nullable=False); password_hash = db.Column(db.String(256), nullable=False)
     articles = db.relationship('Article', secondary=reading_list, backref=db.backref('readers', lazy=True))
+    refresh_token = db.Column(db.String(128), unique=True, nullable=True)
     def set_password(self, password): self.password_hash = generate_password_hash(password)
     def check_password(self, password): return check_password_hash(self.password_hash, password)
 
@@ -445,17 +446,23 @@ def redeem_sso_ticket():
     # Use the modern db.session.get() to avoid the legacy warning
     user = db.session.get(User, sso_ticket.user_id) 
 
-    # --- THIS IS THE LINE WE ARE FIXING ---
-    # Removed the incorrect 'datetime.' prefix before 'timedelta'
+    # generate short-lived JWT (30 min)
     token = jwt.encode(
-        {'id': user.id, 'exp': datetime.utcnow() + timedelta(hours=24)},
+        {"id": user.id, "exp": datetime.utcnow() + timedelta(minutes=30)},
         app.config['SECRET_KEY'],
         "HS256"
     )
-    
+
+    # generate a long-lived refresh token
+    refresh_token = secrets.token_urlsafe(64)
+    user.refresh_token = refresh_token
     db.session.commit()
 
-    return jsonify({'token': token, 'username': user.username})
+    return jsonify({
+        "token": token,
+        "refresh_token": refresh_token,
+        "username": user.username
+    })
 
 @app.route('/source_analysis', methods=['GET'])
 @token_required
@@ -481,23 +488,47 @@ def source_analysis(current_user):
 def sentiment_timeline(current_user):
     """Groups articles by date and calculates the average sentiment for each day."""
     daily_sentiments = defaultdict(list)
-    
+
     for article in current_user.articles:
         # Group scores by date
         day = article.retrieved_at.strftime('%Y-%m-%d')
         daily_sentiments[day].append(article.sentiment_score)
-        
+
     # Calculate the average for each day
     analysis_results = []
     for day, scores in daily_sentiments.items():
         if scores:
             average = sum(scores) / len(scores)
             analysis_results.append({'date': day, 'average_sentiment': average})
-            
+
     # Sort by date
     analysis_results.sort(key=lambda item: item['date'])
-    
+
     return jsonify(analysis_results)
+
+
+@app.route("/refresh_token", methods=["POST"])
+def refresh_token():
+    data = request.get_json()
+    incoming_refresh = data.get("refresh_token")
+
+    if not incoming_refresh:
+        return jsonify({"message": "Missing refresh token"}), 400
+
+    user = User.query.filter_by(refresh_token=incoming_refresh).first()
+    if not user:
+        return jsonify({"message": "Invalid refresh token"}), 401
+
+    # issue a fresh JWT
+    token = jwt.encode(
+        {"id": user.id, "exp": datetime.utcnow() + timedelta(minutes=30)},
+        app.config["SECRET_KEY"],
+        "HS256",
+    )
+    print(f"Refreshed token for user: {user.username}")
+    return jsonify({"token": token})
+
+
 # 7. Main execution block
 if __name__ == '__main__':
     with app.app_context():
