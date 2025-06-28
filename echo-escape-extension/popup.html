@@ -1,15 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <title>Echo Escape</title>
-    <link rel="stylesheet" href="popup.css">
+    <meta charset="UTF-8" />
+    <title>Out of the Loop</title>
+    <link rel="stylesheet" href="popup.css" />
+    <style>
+        /* Inline fallback to load a modern Google font quickly */
+        @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap");
+    </style>
 </head>
+
 <body>
     <div class="container" id="root-container">
-        <h4>Loading...</h4>
+        <div class="loading-screen">
+            <h3>Echo Escape</h3>
+            <p class="analyzing-message">Loading, please wait...</p>
+        </div>
     </div>
-    
     <script src="popup.js" defer></script>
 </body>
+
 </html>
