@@ -201,6 +201,7 @@ function handleAuth(mode, container, e) {
 }
 
 function handleAnalysis() {
+    
     const analyzeButton = document.getElementById('analyze-button');
     const resultsContainer = document.getElementById('results-container');
 
@@ -215,8 +216,8 @@ function handleAnalysis() {
             return;
         }
 
-        chrome.storage.sync.get(['token'], function (result) {
-            if (!result.token) {
+        chrome.storage.sync.get(['token'], function (tokenResult) {
+            if (!tokenResult.token) {
                 resultsContainer.innerHTML = '<div class="error-message">Error: Not logged in.</div>';
                 return;
             }
@@ -225,7 +226,7 @@ function handleAnalysis() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-access-token': result.token
+                    'x-access-token': tokenResult.token
                 },
                 body: JSON.stringify({ url: currentTab.url })
             })
@@ -234,6 +235,8 @@ function handleAnalysis() {
                         return response.json().then(err => {
                             if (err.message && err.message.includes("Token is invalid")) {
                                 // try to refresh
+                                
+
                                 chrome.storage.sync.get(['refreshToken'], function (result) {
                                     if (!result.refreshToken) {
                                         resultsContainer.innerHTML = `
@@ -255,7 +258,7 @@ function handleAnalysis() {
                                             return refreshRes.json();
                                         })
                                         .then(newData => {
-                                            console.log("✅ refreshed JWT successfully", newData.token);
+                                        
                                             chrome.storage.sync.set({ token: newData.token }, () => {
                                                 // retry the original analyze call
                                                 handleAnalysis();
