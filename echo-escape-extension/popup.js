@@ -205,7 +205,13 @@ function handleAnalysis() {
     const analyzeButton = document.getElementById('analyze-button');
     const resultsContainer = document.getElementById('results-container');
 
-    resultsContainer.innerHTML = 'Analyzing...';
+    resultsContainer.innerHTML = `
+    <div class="analyzing-message">
+      Analyzing, please wait...
+      <div class="spinner"></div>
+    </div>
+  `;
+  
     analyzeButton.textContent = 'Analyzing...';
     analyzeButton.disabled = true;
 
