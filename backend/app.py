@@ -212,13 +212,33 @@ def register():
     user = User(username=u); user.set_password(p); db.session.add(user); db.session.commit()
     return jsonify({'message': 'User registered successfully'})
 
-@app.route('/login', methods=['POST'])
+
+@app.route("/login", methods=["POST"])
 def login():
-    data = request.get_json(); u, p = data.get('username'), data.get('password')
+    data = request.get_json()
+    u, p = data.get("username"), data.get("password")
     user = User.query.filter_by(username=u).first()
-    if not user or not user.check_password(p): return jsonify({'message': 'Invalid credentials'}), 401
-    token = jwt.encode({'id': user.id, 'exp': datetime.utcnow() + timedelta(hours=24)}, app.config['SECRET_KEY'], "HS256")
-    return jsonify({'token': token, 'username': user.username})
+    if not user or not user.check_password(p):
+        return jsonify({"message": "Invalid credentials"}), 401
+
+    # issue 2-minute token
+    token = jwt.encode(
+        {"id": user.id, "exp": datetime.utcnow() + timedelta(minutes=2)},
+        app.config["SECRET_KEY"],
+        "HS256",
+    )
+
+    # issue refresh token
+    refresh_token = secrets.token_urlsafe(64)
+    user.refresh_token = refresh_token
+    db.session.commit()
+
+    print(f"[DEBUG] user logged in, refresh token: {refresh_token}")
+
+    return jsonify(
+        {"token": token, "refresh_token": refresh_token, "username": user.username}
+    )
+
 
 @app.route('/dashboard', methods=['GET'])
 @token_required
@@ -336,9 +356,9 @@ def analyze(current_user):
         html = get_html(url)
         if not html:
             raise ValueError("Could not retrieve HTML.")
-            
+
         soup = BeautifulSoup(html, 'html.parser')
-        
+
         title = None
         # robust title strategy
         h1_tag = soup.find("h1")
@@ -354,10 +374,10 @@ def analyze(current_user):
                 title = og_title["content"]
             else:
                 title = soup.find("title").get_text(strip=True) if soup.find("title") else "No Title"
-        
+
         text = extract_article_text(soup, url=url)
         print(f"EXTRACTED TEXT LENGTH: {len(text)}")
-        
+
         # final paywall or junk check
         if (
             (not text or len(text.strip()) < 50)
@@ -387,7 +407,7 @@ def analyze(current_user):
         db.session.add(new_article)
         current_user.articles.append(new_article)
         db.session.commit()
-        
+
         return jsonify({
             "message": "Article analyzed",
             "data": {
@@ -401,6 +421,8 @@ def analyze(current_user):
 
     except Exception as e:
         print(f"EXCEPTION in /analyze: {e}")
+        print(f"[DEBUG] token invalid: {e}")
+
         return jsonify({
             "message": "This article could not be analyzed due to a technical issue or heavy paywall restrictions.",
             "data": None
@@ -435,20 +457,20 @@ def redeem_sso_ticket():
         return jsonify({'message': 'Ticket is missing'}), 400
 
     sso_ticket = SsoTicket.query.filter_by(ticket=ticket_string).first()
-    
+
     # Use utcnow() for simple, naive UTC datetime comparison
     if not sso_ticket or sso_ticket.is_used or sso_ticket.expires_at < datetime.utcnow():
         return jsonify({'message': 'Invalid or expired ticket'}), 401
-    
+
     # Mark ticket as used
     sso_ticket.is_used = True
-    
+
     # Use the modern db.session.get() to avoid the legacy warning
     user = db.session.get(User, sso_ticket.user_id) 
 
     # generate short-lived JWT (30 min)
     token = jwt.encode(
-        {"id": user.id, "exp": datetime.utcnow() + timedelta(minutes=30)},
+        {"id": user.id, "exp": datetime.utcnow() + timedelta(minutes=2)},
         app.config['SECRET_KEY'],
         "HS256"
     )
@@ -457,6 +479,9 @@ def redeem_sso_ticket():
     refresh_token = secrets.token_urlsafe(64)
     user.refresh_token = refresh_token
     db.session.commit()
+    print(
+        f"[DEBUG] user {user.username} redeemed SSO ticket and got refresh token: {refresh_token}"
+    )
 
     return jsonify({
         "token": token,
@@ -511,6 +536,7 @@ def sentiment_timeline(current_user):
 def refresh_token():
     data = request.get_json()
     incoming_refresh = data.get("refresh_token")
+    print(f"[DEBUG] refresh_token endpoint called with: {incoming_refresh}")
 
     if not incoming_refresh:
         return jsonify({"message": "Missing refresh token"}), 400
@@ -526,6 +552,7 @@ def refresh_token():
         "HS256",
     )
     print(f"Refreshed token for user: {user.username}")
+
     return jsonify({"token": token})
 
 
