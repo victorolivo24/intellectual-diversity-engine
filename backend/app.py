@@ -536,7 +536,7 @@ def sentiment_timeline(current_user):
 def refresh_token():
     data = request.get_json()
     incoming_refresh = data.get("refresh_token")
-    print(f"[DEBUG] refresh_token endpoint called with: {incoming_refresh}")
+
 
     if not incoming_refresh:
         return jsonify({"message": "Missing refresh token"}), 400
