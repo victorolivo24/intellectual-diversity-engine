@@ -25,8 +25,7 @@ from collections import Counter
 import pickle
 from joblib import load
 import numpy as np
-
-
+from transformers import pipeline
 
 
 nltk.download("vader_lexicon")
@@ -194,32 +193,42 @@ ml_vectorizer = load("sentiment_vectorizer.joblib")
 ml_model = load("sentiment_model.joblib")
 
 
-def get_ml_analysis(text):
+
+
+# load once at startup
+sentiment_pipeline = pipeline("sentiment-analysis")
+stop_words = set(stopwords.words("english"))
+
+
+def get_bert_analysis(text):
     """
-    Uses the trained scikit-learn model to predict sentiment for the given text,
-    and extracts top keywords based on simple token counts.
+    Uses a BERT sentiment pipeline to predict sentiment,
+    with keyword extraction and category detection.
     """
 
-    # Vectorize the input text
-    X = ml_vectorizer.transform([text])
+    # BERT is limited to 512 tokens, truncate for safe measure
+    short_text = text[:512]
 
-    # Predict the sentiment class
-    sentiment_class = ml_model.predict(X)[0]
+    # get BERT result
+    result = sentiment_pipeline(short_text)[0]
+    label = result["label"]
+    confidence = result["score"]
 
-    # Map numeric class back to float score
-    # (for consistency with previous APIs)
-    sentiment_score = {-1: -0.8, 0: 0.0, 1: 0.8}.get(sentiment_class, 0.0)
+    # map to familiar scoring
+    if label == "POSITIVE":
+        sentiment_score = 0.8 * confidence
+    elif label == "NEGATIVE":
+        sentiment_score = -0.8 * confidence
+    else:
+        sentiment_score = 0.0
 
-    # Generate naive keywords
-    from collections import Counter
-    import re
-
+    # extract keywords with stopword filtering
     tokens = re.findall(r"\b\w+\b", text.lower())
-    filtered_tokens = [w for w in tokens if w not in stop_words]
+    filtered_tokens = [w for w in tokens if w not in stop_words and len(w) > 2]
     token_counts = Counter(filtered_tokens)
     keywords = [w for w, c in token_counts.most_common(7)]
 
-    # Very simple category classifier
+    # simple category
     categories = [
         "Politics",
         "Technology",
@@ -467,7 +476,7 @@ def analyze(current_user):
                 "data": None
             }), 200
 
-        sentiment, keywords, category = get_ml_analysis(text)
+        sentiment, keywords, category = get_bert_analysis(text)
 
         new_article = Article(
             url=url,

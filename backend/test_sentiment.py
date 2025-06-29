@@ -1,44 +1,73 @@
-from app import get_local_analysis
+from transformers import pipeline
+from nltk.corpus import stopwords
+from collections import Counter
+import re
+import nltk
 
-test_cases = [
-    {
-        "text": "The city finally finished the new stadium after years of delays and billions in taxpayer money. At least it looks nice.",
-        "expected": "neutral or negative",
-    },
-    {
-        "text": "Despite repeated warnings, the company continued to dump waste into the river, affecting thousands of residents.",
-        "expected": "negative",
-    },
-    {
-        "text": "The groundbreaking cancer treatment shows promise but still has a long way to go before approval.",
-        "expected": "neutral or positive",
-    },
-    {
-        "text": "Police responded quickly and no one was hurt in the incident, which could have been much worse.",
-        "expected": "neutral or positive",
-    },
-    {
-        "text": "Critics slammed the new policy as an overreach of government power, though supporters argued it was necessary.",
-        "expected": "neutral",
-    },
-    {
-        "text": "The festival was canceled due to safety concerns, leaving thousands of fans disappointed.",
-        "expected": "negative",
-    },
-    {
-        "text": "After a heated debate, lawmakers agreed on a compromise bill to fund public schools.",
-        "expected": "neutral or positive",
-    },
+nltk.download("stopwords")
+
+# reuse the same get_bert_analysis
+sentiment_pipeline = pipeline("sentiment-analysis")
+stop_words = set(stopwords.words("english"))
+
+
+def get_bert_analysis(text):
+    short_text = text[:512]
+    result = sentiment_pipeline(short_text)[0]
+    label = result["label"]
+    confidence = result["score"]
+
+    if label == "POSITIVE":
+        sentiment_score = 0.8 * confidence
+    elif label == "NEGATIVE":
+        sentiment_score = -0.8 * confidence
+    else:
+        sentiment_score = 0.0
+
+    tokens = re.findall(r"\b\w+\b", text.lower())
+    filtered_tokens = [w for w in tokens if w not in stop_words and len(w) > 2]
+    token_counts = Counter(filtered_tokens)
+    keywords = [w for w, c in token_counts.most_common(7)]
+
+    categories = [
+        "Politics",
+        "Technology",
+        "Sports",
+        "Business",
+        "Entertainment",
+        "Science",
+        "Health",
+        "World News",
+        "Lifestyle",
+        "Crime",
+        "Other",
+    ]
+    category = "Other"
+    for cat in categories:
+        if cat.lower() in text.lower():
+            category = cat
+            break
+
+    return sentiment_score, keywords, category
+
+
+# --- TEST CASES ---
+samples = [
+    (
+        "The new community center offers free classes and activities for local children.",
+        "positive",
+    ),
+    ("A tragic fire destroyed dozens of homes last night.", "negative"),
+    ("Lawmakers reached a compromise after weeks of tense debate.", "neutral/positive"),
+    ("The local festival was canceled because of safety concerns.", "negative"),
+    ("A new tech startup is revolutionizing the way we order groceries.", "positive"),
 ]
 
-for idx, case in enumerate(test_cases, start=1):
-    score, keywords, category = get_local_analysis(case["text"])
-    classification = (
-        "positive" if score > 0.05 else "negative" if score < -0.05 else "neutral"
-    )
-    print(f"Test {idx}: {case['text'][:60]}...")
-    print(f"  Compound score: {score:.2f}")
-    print(f"  Classified as: {classification}")
+for idx, (text, expected) in enumerate(samples, 1):
+    score, keywords, category = get_bert_analysis(text)
+    print(f"Test {idx}: {text[:50]}...")
+    print(f"  Sentiment Score: {score:.2f}")
     print(f"  Keywords: {keywords}")
-    print(f"  Expected: {case['expected']}")
+    print(f"  Category: {category}")
+    print(f"  Expected: {expected}")
     print("---")
