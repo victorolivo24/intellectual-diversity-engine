@@ -223,7 +223,7 @@ def login():
 
     # issue 2-minute token
     token = jwt.encode(
-        {"id": user.id, "exp": datetime.utcnow() + timedelta(minutes=2)},
+        {"id": user.id, "exp": datetime.utcnow() + timedelta(hours=24)},
         app.config["SECRET_KEY"],
         "HS256",
     )
@@ -504,7 +504,7 @@ def redeem_sso_ticket():
 
     # generate short-lived JWT (30 min)
     token = jwt.encode(
-        {"id": user.id, "exp": datetime.utcnow() + timedelta(minutes=2)},
+        {"id": user.id, "exp": datetime.utcnow() + timedelta(hours=24)},
         app.config['SECRET_KEY'],
         "HS256"
     )
