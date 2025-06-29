@@ -275,9 +275,10 @@ def move_article(current_user):
 @app.route("/category_analysis", methods=["GET"])
 @token_required
 def category_analysis(current_user):
-    category_sentiments = defaultdict(lambda: {"total_score": 0, "count": 0})
+    from collections import defaultdict
 
-    # first, aggregate as before
+    # analyze articles
+    category_sentiments = defaultdict(lambda: {"total_score": 0, "count": 0})
     for article in current_user.articles:
         if article.category and article.sentiment_score is not None:
             category_sentiments[article.category][
@@ -285,46 +286,38 @@ def category_analysis(current_user):
             ] += article.sentiment_score
             category_sentiments[article.category]["count"] += 1
 
-    # get all custom topics from DB
+    # get user-created topics
     user_topics = [
         topic.name for topic in UserTopic.query.filter_by(user_id=current_user.id).all()
     ]
 
-    # make sure all topics (custom and default) are in the dictionary
-    all_possible_topics = user_topics + [
-        "Politics",
-        "Technology",
-        "Sports",
-        "Business",
-        "Entertainment",
-        "Science",
-        "Health",
-        "World News",
-        "Lifestyle",
-        "Crime",
-        "Other",
-    ]
-
-    for topic in all_possible_topics:
-        if topic not in category_sentiments:
-            category_sentiments[topic] = {"total_score": 0, "count": 0}
-
-    # convert to results
-    analysis_results = []
-    for cat, data in category_sentiments.items():
-        count = data["count"]
-        avg = data["total_score"] / count if count > 0 else 0.0
-        analysis_results.append(
-            {"category": cat, "average_sentiment": avg, "article_count": count}
+    # build results
+    results = []
+    for category, data in category_sentiments.items():
+        results.append(
+            {
+                "category": category,
+                "average_sentiment": data["total_score"] / data["count"],
+                "article_count": data["count"],
+            }
         )
 
-    # sort descending by article count, then by category name
-    analysis_results.sort(key=lambda x: (-x["article_count"], x["category"]))
+    # add user topics even if no articles assigned
+    for user_topic in user_topics:
+        if user_topic not in category_sentiments:
+            results.append(
+                {"category": user_topic, "average_sentiment": 0.0, "article_count": 0}
+            )
 
-    return jsonify(analysis_results)
+    # filter out default topics with zero articles
+    results = [
+        r for r in results if r["article_count"] > 0 or r["category"] in user_topics
+    ]
 
+    # sort
+    results.sort(key=lambda x: (-x["article_count"], x["category"]))
+    return jsonify(results)
 
-DEFAULT_TOPICS = ["Politics", "Technology", "Sports", "Business", "Entertainment", "Science", "Health", "World News", "Lifestyle", "Crime", "Other"]
 
 @app.route('/topics', methods=['GET'])
 @token_required
