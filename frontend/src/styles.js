@@ -1,9 +1,7 @@
-// styles.js
-
 const styles = {
   container: {
     backgroundColor: '#121212',
-    color: '#f1f1f1',
+    color: '#eaeaea',
     minHeight: '100vh',
     padding: '20px',
     fontFamily: 'Poppins, Arial, sans-serif',
@@ -13,34 +11,32 @@ const styles = {
   },
   card: {
     backgroundColor: '#1f1f1f',
-    color: '#f1f1f1',
-    borderRadius: '16px',
-    boxShadow: '0 8px 20px rgba(0,0,0,0.6)',
+    color: '#eaeaea',
+    borderRadius: '12px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
     padding: '20px',
     width: '100%',
-    maxWidth: '800px',
-    transition: 'all 0.3s ease'
+    maxWidth: '800px'
   },
   button: {
-    backgroundColor: '#28a745',
+    backgroundColor: '#3b82f6',  // a clean blue accent
     color: 'white',
     border: 'none',
     padding: '10px 16px',
-    borderRadius: '8px',
+    borderRadius: '6px',
     cursor: 'pointer',
-    fontWeight: 'bold',
-    fontSize: '14px',
-    transition: 'background 0.3s ease',
+    fontWeight: '500',
+    fontSize: '14px'
   },
   buttonHover: {
-    backgroundColor: '#218838'
+    backgroundColor: '#2563eb'
   },
   input: {
     padding: '10px',
-    borderRadius: '8px',
-    border: '1px solid #444',
+    borderRadius: '6px',
+    border: '1px solid #333',
     backgroundColor: '#222',
-    color: '#f1f1f1',
+    color: '#eaeaea',
   },
   errorText: {
     color: '#fa383e',
@@ -48,29 +44,26 @@ const styles = {
   },
   nav: {
     display: 'flex',
-    borderBottom: '1px solid #333',
-    marginBottom: '16px'
+    marginBottom: '16px',
+    gap: '8px'
   },
   navButton: {
-    backgroundColor: 'transparent',
-    color: '#f1f1f1',
-    border: 'none',
-    padding: '12px 20px',
+    backgroundColor: '#1f1f1f',
+    color: '#eaeaea',
+    border: '1px solid #333',
+    padding: '8px 12px',
     cursor: 'pointer',
-    transition: 'color 0.3s ease, border-bottom 0.3s ease',
-    fontSize: '14px',
-    borderBottom: '2px solid transparent'
+    fontSize: '13px',
+    borderRadius: '6px'
   },
   activeNavButton: {
-    color: '#28a745',
-    borderBottom: '2px solid #28a745',
-    fontWeight: 'bold'
+    backgroundColor: '#3b82f6',
+    color: 'white',
+    fontWeight: '600'
   },
   sectionTitle: {
     fontSize: '16px',
-    fontWeight: 'bold',
-    borderBottom: '1px solid #333',
-    paddingBottom: '5px',
+    fontWeight: '600',
     marginBottom: '10px'
   },
   sentimentBar: {
@@ -85,20 +78,18 @@ const styles = {
     marginTop: '10px'
   },
   wordItem: {
-    backgroundColor: 'green',
-    color: '#FAF9F6',
-    borderRadius: '15px',
+    backgroundColor: '#3b82f6',
+    color: '#f1f1f1',
+    borderRadius: '12px',
     padding: '5px 10px',
-    margin: '5px',
-    display: 'inline-block'
-  }
-  ,
+    fontSize: '12px'
+  },
   topicTable: {
     width: '100%',
     borderCollapse: 'collapse'
   },
   tableHeader: {
-    backgroundColor: '#28a745',
+    backgroundColor: '#3b82f6',
     color: 'white',
     fontSize: '13px',
     padding: '8px'
@@ -109,5 +100,4 @@ const styles = {
     fontSize: '12px'
   }
 };
-
 export default styles;
