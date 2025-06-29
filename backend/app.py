@@ -19,7 +19,9 @@ from datetime import timedelta, datetime, timezone
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-
+import nltk
+from nltk.corpus import stopwords
+from textblob import TextBlob
 
 # 2. Initial Setup
 load_dotenv()
@@ -27,7 +29,7 @@ app = Flask(__name__)
 CORS(app)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
-app.config['GEMINI_API_KEY'] = os.getenv('GEMINI_API_KEY')
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -104,7 +106,7 @@ def get_html(url):
         temp_text = extract_article_text(temp_soup, url=url)
         print(f"--- Text content length from simple request: {len(temp_text)} ---")
 
-        if len(temp_text) > 500:
+        if len(temp_text) > 100:
             print("--- Simple request successful with enough content. ---")
             return response.text
 
@@ -172,36 +174,49 @@ def extract_article_text(soup, url=None):
     return soup.get_text(separator="\n", strip=True)
 
 
-# --- UPDATED: Gemini AI Analysis Function ---
-def get_ai_analysis(text):
-    print("--- Getting analysis from Gemini AI ---")
-    max_chars = 15000 
-    truncated_text = text[:max_chars]
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
-    categories = ["Politics", "Technology", "Sports", "Business", "Entertainment", "Science", "Health", "World News", "Lifestyle", "Crime", "Other"]
-    
-    prompt = f"""
-    Analyze the following news article text. Provide your analysis in a single, valid JSON object with three keys:
-    1. "sentiment_score": A float from -1.0 (very negative) to 1.0 (very positive), assessing the overall tone.
-    2. "keywords": A JSON array of the 5-7 most relevant, general, single-word keywords. These should be broad topics. Normalize them to their base form (e.g., "economy" not "economic", "politics" not "political").
-    3. "category": A single string, choosing the ONE most fitting category for this article from the following list: {categories}
-    Article Text: "{truncated_text}"
+
+def get_local_analysis(text):
     """
-    
-    payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
-    api_key = app.config['GEMINI_API_KEY']
-    if not api_key: raise ValueError("GEMINI_API_KEY not set in environment.")
-    
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
-    
-    try:
-        response = requests.post(api_url, headers={'Content-Type': 'application/json'}, json=payload, timeout=45)
-        response.raise_for_status(); result = response.json()
-        content = result['candidates'][0]['content']['parts'][0]['text'].strip().replace('```json', '').replace('```', '')
-        analysis = json.loads(content)
-        return analysis.get('sentiment_score', 0.0), analysis.get('keywords', []), analysis.get('category', 'Other')
-    except Exception as e:
-        print(f"Error calling or parsing Gemini API: {e}"); return 0.0, [], "Error"
+    Analyzes the text locally using TextBlob for sentiment,
+    and a simple keyword frequency analysis.
+    """
+    print("--- Running local sentiment analysis ---")
+    blob = TextBlob(text)
+    sentiment_score = blob.sentiment.polarity  # -1 to 1
+
+    # keyword extraction using simple frequency
+    words = [word.lower() for word in blob.words if word.isalpha()]
+    stop_words = set(stopwords.words("english"))
+    filtered = [w for w in words if w not in stop_words]
+    word_counts = Counter(filtered)
+    keywords = [w for w, _ in word_counts.most_common(7)]
+
+    # classify category by simple heuristic (could expand later)
+    possible_categories = [
+        "Politics",
+        "Technology",
+        "Sports",
+        "Business",
+        "Entertainment",
+        "Science",
+        "Health",
+        "World News",
+        "Lifestyle",
+        "Crime",
+        "Other",
+    ]
+    # naive: pick first keyword match
+    category = "Other"
+    for w in keywords:
+        for cat in possible_categories:
+            if w in cat.lower():
+                category = cat
+                break
+
+    return sentiment_score, keywords, category
+
 
 # 6. API Routes
 @app.route('/register', methods=['POST'])
@@ -428,7 +443,7 @@ def analyze(current_user):
                 "data": None
             }), 200
 
-        sentiment, keywords, category = get_ai_analysis(text)
+        sentiment, keywords, category = get_local_analysis(text)
 
         new_article = Article(
             url=url,
