@@ -26,8 +26,6 @@ import pickle
 from joblib import load
 import numpy as np
 
-with open("sentiment_model.pkl", "rb") as f:
-    sentiment_model = pickle.load(f)
 
 
 
