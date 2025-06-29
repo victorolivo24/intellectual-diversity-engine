@@ -271,31 +271,72 @@ def move_article(current_user):
 
     return jsonify({'message': f"Article '{article.title}' moved to '{new_category}' successfully."})
 
-# --- NEW: Category Analysis Endpoint ---
-@app.route('/category_analysis', methods=['GET'])
+
+@app.route("/category_analysis", methods=["GET"])
 @token_required
 def category_analysis(current_user):
-    category_sentiments = defaultdict(lambda: {'total_score': 0, 'count': 0})
+    category_sentiments = defaultdict(lambda: {"total_score": 0, "count": 0})
+
+    # first, aggregate as before
     for article in current_user.articles:
         if article.category and article.sentiment_score is not None:
-            category_sentiments[article.category]['total_score'] += article.sentiment_score
-            category_sentiments[article.category]['count'] += 1
-    
-    analysis_results = [{'category': cat, 'average_sentiment': data['total_score'] / data['count'], 'article_count': data['count']} for cat, data in category_sentiments.items() if data['count'] > 0]
-    analysis_results.sort(key=lambda x: (-x['article_count'], x['category']))
+            category_sentiments[article.category][
+                "total_score"
+            ] += article.sentiment_score
+            category_sentiments[article.category]["count"] += 1
+
+    # get all custom topics from DB
+    user_topics = [
+        topic.name for topic in UserTopic.query.filter_by(user_id=current_user.id).all()
+    ]
+
+    # make sure all topics (custom and default) are in the dictionary
+    all_possible_topics = user_topics + [
+        "Politics",
+        "Technology",
+        "Sports",
+        "Business",
+        "Entertainment",
+        "Science",
+        "Health",
+        "World News",
+        "Lifestyle",
+        "Crime",
+        "Other",
+    ]
+
+    for topic in all_possible_topics:
+        if topic not in category_sentiments:
+            category_sentiments[topic] = {"total_score": 0, "count": 0}
+
+    # convert to results
+    analysis_results = []
+    for cat, data in category_sentiments.items():
+        count = data["count"]
+        avg = data["total_score"] / count if count > 0 else 0.0
+        analysis_results.append(
+            {"category": cat, "average_sentiment": avg, "article_count": count}
+        )
+
+    # sort descending by article count, then by category name
+    analysis_results.sort(key=lambda x: (-x["article_count"], x["category"]))
+
     return jsonify(analysis_results)
+
 
 DEFAULT_TOPICS = ["Politics", "Technology", "Sports", "Business", "Entertainment", "Science", "Health", "World News", "Lifestyle", "Crime", "Other"]
 
 @app.route('/topics', methods=['GET'])
 @token_required
 def get_topics(current_user):
-    """Gets the full list of default and user-created topics."""
-    custom_topics = [topic.name for topic in UserTopic.query.filter_by(user_id=current_user.id).all()]
+    custom_topics = [
+        topic.name for topic in UserTopic.query.filter_by(user_id=current_user.id).all()
+    ]
     return jsonify({
         'default_topics': DEFAULT_TOPICS,
         'custom_topics': sorted(custom_topics)
     })
+
 
 @app.route('/topics', methods=['POST'])
 @token_required

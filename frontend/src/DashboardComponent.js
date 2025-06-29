@@ -15,10 +15,27 @@ export default function DashboardComponent({ auth, onRefresh, key }) {
   const [showTopicModal, setShowTopicModal] = useState(false);
   const [newTopicName, setNewTopicName] = useState("");
 
-  const allCategories = [
-    "Politics", "Technology", "Sports", "Business", "Entertainment",
-    "Science", "Health", "World News", "Lifestyle", "Crime", "Other"
-  ];
+  const [allCategories, setAllCategories] = useState([
+    "Politics", "Technology", "Sports", "Business",
+    "Entertainment", "Science", "Health", "World News",
+    "Lifestyle", "Crime", "Other"
+  ]);
+
+  useEffect(() => {
+    const fetchTopics = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:5000/topics', {
+          headers: { 'x-access-token': auth.token }
+        });
+        const data = await res.json();
+        setAllCategories([...data.default_topics, ...data.custom_topics]);
+      } catch (err) {
+        console.error("Error fetching topics", err);
+      }
+    };
+    fetchTopics();
+  }, [auth.token]);
+  
 
   useEffect(() => {
     if (!auth.token) return;
