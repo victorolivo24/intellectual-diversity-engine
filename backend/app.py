@@ -191,7 +191,7 @@ def extract_article_text(soup, url=None):
 sia = SentimentIntensityAnalyzer()
 stop_words = set(stopwords.words("english"))
 ml_vectorizer = load("sentiment_vectorizer.joblib")
-ml_model = load("sentiment_model.pkl")
+ml_model = load("sentiment_model.joblib")
 
 
 def get_ml_analysis(text):
@@ -215,7 +215,8 @@ def get_ml_analysis(text):
     import re
 
     tokens = re.findall(r"\b\w+\b", text.lower())
-    token_counts = Counter(tokens)
+    filtered_tokens = [w for w in tokens if w not in stop_words]
+    token_counts = Counter(filtered_tokens)
     keywords = [w for w, c in token_counts.most_common(7)]
 
     # Very simple category classifier
