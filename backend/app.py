@@ -2,6 +2,7 @@
 import datetime, json, os, re, time
 from collections import Counter, defaultdict
 from functools import wraps
+import nltk
 import requests
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
@@ -20,8 +21,13 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import nltk
+from nltk.sentiment import SentimentIntensityAnalyzer
+from collections import Counter
+import re
+
+nltk.download("vader_lexicon")
+nltk.download("stopwords")
 from nltk.corpus import stopwords
-from textblob import TextBlob
 
 # 2. Initial Setup
 load_dotenv()
@@ -173,28 +179,26 @@ def extract_article_text(soup, url=None):
 
     return soup.get_text(separator="\n", strip=True)
 
-
-from nltk.sentiment.vader import SentimentIntensityAnalyzer
-
-
+sia = SentimentIntensityAnalyzer()
+stop_words = set(stopwords.words("english"))
 def get_local_analysis(text):
     """
-    Analyzes the text locally using TextBlob for sentiment,
-    and a simple keyword frequency analysis.
+    Perform local sentiment + simple keyword + category classification. Returns (sentiment_score, keywords, category)
     """
-    print("--- Running local sentiment analysis ---")
-    blob = TextBlob(text)
-    sentiment_score = blob.sentiment.polarity  # -1 to 1
 
-    # keyword extraction using simple frequency
-    words = [word.lower() for word in blob.words if word.isalpha()]
-    stop_words = set(stopwords.words("english"))
-    filtered = [w for w in words if w not in stop_words]
-    word_counts = Counter(filtered)
-    keywords = [w for w, _ in word_counts.most_common(7)]
+    # 1. sentiment
+    sentiment = sia.polarity_scores(text)
+    compound = sentiment["compound"]  # -1 to 1
 
-    # classify category by simple heuristic (could expand later)
-    possible_categories = [
+    # 2. keywords
+    # tokenize on whitespace, remove short words, punctuation, and stopwords
+    words = re.findall(r"\b[a-z]{3,}\b", text.lower())
+    words = [w for w in words if w not in stop_words]
+    counts = Counter(words)
+    keywords = [w for w, _ in counts.most_common(7)]
+
+    # 3. category using a naive match to your default categories
+    default_categories = [
         "Politics",
         "Technology",
         "Sports",
@@ -207,15 +211,15 @@ def get_local_analysis(text):
         "Crime",
         "Other",
     ]
-    # naive: pick first keyword match
-    category = "Other"
-    for w in keywords:
-        for cat in possible_categories:
-            if w in cat.lower():
-                category = cat
-                break
 
-    return sentiment_score, keywords, category
+    # try to match most common keyword to category
+    category = "Other"
+    for cat in default_categories:
+        if cat.lower() in (w.lower() for w in keywords):
+            category = cat
+            break
+
+    return compound, keywords, category
 
 
 # 6. API Routes
