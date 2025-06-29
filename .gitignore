@@ -5,3 +5,9 @@ __pycache__/
 
 # Environment
 .env
+
+# model artifacts
+sentiment_model.pkl
+sentiment_vectorizer.joblib
+vectorizer.pkl
+sentiment_model.joblib
