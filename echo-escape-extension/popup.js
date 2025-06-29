@@ -208,9 +208,21 @@ function handleAnalysis() {
     resultsContainer.innerHTML = `
     <div class="analyzing-message">
       Analyzing, please wait...
-      <div class="spinner"></div>
+      <svg class="loop-spinner" viewBox="0 0 50 50">
+        <path
+          class="loop-path"
+          d="M25 5
+             a 20 20 0 1 1 -15 8"
+          fill="none"
+          stroke-width="4"
+          stroke-linecap="round"
+        ></path>
+        <circle class="escape-dot" cx="40" cy="25" r="3"></circle>
+      </svg>
     </div>
   `;
+  
+  
   
     analyzeButton.textContent = 'Analyzing...';
     analyzeButton.disabled = true;
