@@ -25,7 +25,8 @@ from collections import Counter
 import pickle
 from joblib import load
 import numpy as np
-from transformers import pipeline
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import torch
 
 
 nltk.download("vader_lexicon")
