@@ -28,7 +28,7 @@ import numpy as np
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 from transformers import pipeline
-
+import threading
 
 nltk.download("vader_lexicon")
 nltk.download("stopwords")
@@ -43,13 +43,9 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
-print("--- Loading local sentiment model... ---")
-sentiment_pipeline = pipeline(
-    "text-classification",
-    model="./news-bert-sentiment-regressor",
-    tokenizer="./news-bert-sentiment-regressor",
-)
-print("--- Sentiment model loaded successfully. ---")
+# The new, lazy-loading setup
+sentiment_pipeline = None
+pipeline_lock = threading.Lock()
 # 3. Database Models
 reading_list = db.Table('reading_list',
     db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
@@ -201,15 +197,45 @@ ml_vectorizer = load("sentiment_vectorizer.joblib")
 ml_model = load("sentiment_model.joblib")
 
 
-# load once at startup
-sentiment_pipeline = pipeline("sentiment-analysis")
-stop_words = set(stopwords.words("english"))
+def get_sentiment_pipeline():
+    """
+    Initializes and returns the sentiment analysis pipeline.
+    Uses a lock to ensure the model is only loaded once.
+    """
+    global sentiment_pipeline
+    with pipeline_lock:
+        if sentiment_pipeline is None:
+            print("--- First request: Loading local sentiment model... ---")
+            sentiment_pipeline = pipeline(
+                "text-classification",
+                model="./news-bert-sentiment-regressor",
+                tokenizer="./news-bert-sentiment-regressor",
+            )
+            print("--- Sentiment model loaded successfully. ---")
+    return sentiment_pipeline
 
+
+# load once at startup
+
+stop_words = set(stopwords.words("english"))
+def get_sentiment_pipeline():
+    """
+    Initializes and returns the sentiment analysis pipeline.
+    Uses a lock to ensure the model is only loaded once.
+    """
+    global sentiment_pipeline
+    with pipeline_lock:
+        if sentiment_pipeline is None:
+            print("--- First request: Loading local sentiment model... ---")
+            sentiment_pipeline = pipeline("text-classification", model="./news-bert-sentiment-regressor", tokenizer="./news-bert-sentiment-regressor")
+            print("--- Sentiment model loaded successfully. ---")
+    return sentiment_pipeline
 
 def get_local_analysis(text):
     """Analyzes text using the local fine-tuned BERT model."""
     print("--- Getting analysis from local model ---")
 
+    sentiment_pipeline = get_sentiment_pipeline()
     # 1. Sentiment Analysis
     # The pipeline returns a list with a dictionary. We use the first 512 tokens for BERT.
     result = sentiment_pipeline(text[:512])[0]
@@ -501,7 +527,7 @@ def analyze(current_user):
                 "data": None
             }), 200
 
-        sentiment, keywords, category = get_bert_analysis(text)
+        sentiment, keywords, category = get_local_analysis(text)
 
         new_article = Article(
             url=url,
