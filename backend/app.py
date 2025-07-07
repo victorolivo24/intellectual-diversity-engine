@@ -43,7 +43,13 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
-
+print("--- Loading local sentiment model... ---")
+sentiment_pipeline = pipeline(
+    "text-classification",
+    model="./news-bert-sentiment-regressor",
+    tokenizer="./news-bert-sentiment-regressor",
+)
+print("--- Sentiment model loaded successfully. ---")
 # 3. Database Models
 reading_list = db.Table('reading_list',
     db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
@@ -195,40 +201,57 @@ ml_vectorizer = load("sentiment_vectorizer.joblib")
 ml_model = load("sentiment_model.joblib")
 
 
-
-
 # load once at startup
 sentiment_pipeline = pipeline("sentiment-analysis")
 stop_words = set(stopwords.words("english"))
 
 
-def get_bert_analysis(text):
-    """
-    Uses a BERT sentiment pipeline to predict sentiment,
-    with keyword extraction and category detection.
-    """
+def get_local_analysis(text):
+    """Analyzes text using the local fine-tuned BERT model."""
+    print("--- Getting analysis from local model ---")
 
-    # BERT is limited to 512 tokens, truncate for safe measure
-    short_text = text[:512]
+    # 1. Sentiment Analysis
+    # The pipeline returns a list with a dictionary. We use the first 512 tokens for BERT.
+    result = sentiment_pipeline(text[:512])[0]
+    raw_score = result[
+        "score"
+    ]  # This will be a score between 0 (negative) and 1 (positive)
 
-    # get BERT result
-    result = sentiment_pipeline(short_text)[0]
-    label = result["label"]
-    confidence = result["score"]
+    # Convert the model's [0, 1] score back to our desired [-1, 1] range
+    sentiment_score = (raw_score * 2) - 1
 
-    # map to familiar scoring
-    if label == "POSITIVE":
-        sentiment_score = 0.8 * confidence
-    elif label == "NEGATIVE":
-        sentiment_score = -0.8 * confidence
-    else:
-        sentiment_score = 0.0
-
-    # extract keywords with stopword filtering
-    tokens = re.findall(r"\b\w+\b", text.lower())
-    filtered_tokens = [w for w in tokens if w not in stop_words and len(w) > 2]
-    token_counts = Counter(filtered_tokens)
-    keywords = [w for w, c in token_counts.most_common(7)]
+    # 2. Keyword and Category Generation (Simple Logic)
+    # Since our custom model only provides sentiment, we'll add simple logic for these.
+    stop_words = set(
+        [
+            "the",
+            "a",
+            "an",
+            "in",
+            "on",
+            "of",
+            "and",
+            "to",
+            "for",
+            "is",
+            "are",
+            "was",
+            "were",
+            "it",
+            "i",
+            "you",
+            "he",
+            "she",
+            "they",
+            "we",
+        ]
+    )
+    words = [
+        word
+        for word in re.findall(r"\b\w+\b", text.lower())
+        if word not in stop_words and len(word) > 3
+    ]
+    keywords = [word for word, _ in Counter(words).most_common(5)]
 
     # simple category
     categories = [
