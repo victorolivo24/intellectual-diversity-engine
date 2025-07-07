@@ -27,6 +27,7 @@ from joblib import load
 import numpy as np
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
+from transformers import pipeline
 
 
 nltk.download("vader_lexicon")
