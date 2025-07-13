@@ -1,8 +1,8 @@
 # 1. All import statements
-import datetime, json, os, re, time
+import datetime as dt
+import json, os, re, time
 from collections import Counter, defaultdict
 from functools import wraps
-import nltk
 import requests
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
@@ -16,36 +16,22 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 import secrets
-from datetime import timedelta, datetime, timezone
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from nltk.sentiment import SentimentIntensityAnalyzer
-from collections import Counter
-import pickle
-from joblib import load
-import numpy as np
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-import torch
-from transformers import pipeline
 import threading
-
-nltk.download("vader_lexicon")
-nltk.download("stopwords")
-from nltk.corpus import stopwords
+from transformers import pipeline
 
 # 2. Initial Setup
 load_dotenv()
 app = Flask(__name__)
 CORS(app)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
-
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
-# The new, lazy-loading setup
+
+# Lazy-load the ML model to keep shell commands fast
 sentiment_pipeline = None
 pipeline_lock = threading.Lock()
+
 # 3. Database Models
 reading_list = db.Table('reading_list',
     db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
