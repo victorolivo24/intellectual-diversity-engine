@@ -184,56 +184,33 @@ ml_model = load("sentiment_model.joblib")
 
 
 def get_sentiment_pipeline():
-    """
-    Initializes and returns the sentiment analysis pipeline.
-    Uses a lock to ensure the model is only loaded once.
-    """
+    """Initializes and returns the sentiment analysis pipeline using a thread-safe lock."""
     global sentiment_pipeline
     with pipeline_lock:
         if sentiment_pipeline is None:
-            print("--- First request: Loading local sentiment model... ---")
+            print("--- First request: Loading custom sentiment model... ---")
+            # This path must match the folder you just added
+            model_path = "./out-of-the-loop-production-model"
             sentiment_pipeline = pipeline(
-                "text-classification",
-                model="./news-bert-sentiment-regressor",
-                tokenizer="./news-bert-sentiment-regressor",
+                "sentiment-analysis", model=model_path, tokenizer=model_path
             )
             print("--- Sentiment model loaded successfully. ---")
     return sentiment_pipeline
 
 
-# load once at startup
-
-stop_words = set(stopwords.words("english"))
-def get_sentiment_pipeline():
-    """
-    Initializes and returns the sentiment analysis pipeline.
-    Uses a lock to ensure the model is only loaded once.
-    """
-    global sentiment_pipeline
-    with pipeline_lock:
-        if sentiment_pipeline is None:
-            print("--- First request: Loading local sentiment model... ---")
-            sentiment_pipeline = pipeline("text-classification", model="./news-bert-sentiment-regressor", tokenizer="./news-bert-sentiment-regressor")
-            print("--- Sentiment model loaded successfully. ---")
-    return sentiment_pipeline
-
 def get_local_analysis(text):
-    """Analyzes text using the local fine-tuned BERT model."""
-    print("--- Getting analysis from local model ---")
+    """Analyzes text using the local fine-tuned model."""
+    print("--- Getting analysis from local model... ---")
+    pipeline = get_sentiment_pipeline()
 
-    sentiment_pipeline = get_sentiment_pipeline()
-    # 1. Sentiment Analysis
-    # The pipeline returns a list with a dictionary. We use the first 512 tokens for BERT.
-    result = sentiment_pipeline(text[:512])[0]
-    raw_score = result[
-        "score"
-    ]  # This will be a score between 0 (negative) and 1 (positive)
+    result = pipeline(text[:512])[0]
+    raw_score = result["score"]
 
-    # Convert the model's [0, 1] score back to our desired [-1, 1] range
+    # This model was trained on a [0, 1] scale. Convert back to [-1, 1].
     sentiment_score = (raw_score * 2) - 1
+    sentiment_score = max(-1.0, min(1.0, sentiment_score))  # Clamp the score
 
-    # 2. Keyword and Category Generation (Simple Logic)
-    # Since our custom model only provides sentiment, we'll add simple logic for these.
+    # Simple keyword and category generation
     stop_words = set(
         [
             "the",
@@ -249,13 +226,6 @@ def get_local_analysis(text):
             "are",
             "was",
             "were",
-            "it",
-            "i",
-            "you",
-            "he",
-            "she",
-            "they",
-            "we",
         ]
     )
     words = [
@@ -264,26 +234,7 @@ def get_local_analysis(text):
         if word not in stop_words and len(word) > 3
     ]
     keywords = [word for word, _ in Counter(words).most_common(5)]
-
-    # simple category
-    categories = [
-        "Politics",
-        "Technology",
-        "Sports",
-        "Business",
-        "Entertainment",
-        "Science",
-        "Health",
-        "World News",
-        "Lifestyle",
-        "Crime",
-        "Other",
-    ]
-    category = "Other"
-    for cat in categories:
-        if cat.lower() in text.lower():
-            category = cat
-            break
+    category = "General"
 
     return sentiment_score, keywords, category
 
