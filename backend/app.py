@@ -23,6 +23,14 @@ import threading
 from transformers import pipeline
 import nltk
 from nltk.corpus import stopwords
+import re
+from collections import Counter
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from transformers import pipeline
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import threading
 
 # 2. Initial Setup
 load_dotenv()
@@ -33,11 +41,32 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 
-try:
-    stopwords.words("english")
-except LookupError:
-    nltk.download("stopwords")
+nltk.data.path.append("C:/Users/victo/AppData/Roaming/nltk_data")
 
+# --- Global Setup ---
+pipeline_lock = threading.Lock()
+sentiment_pipeline = None
+lemmatizer = WordNetLemmatizer()
+stop_words = set(stopwords.words("english"))
+custom_stopwords = {
+    "reuters",
+    "said",
+    "would",
+    "also",
+    "new",
+    "one",
+    "that",
+    "will",
+    "us",
+    "visit",
+    "say",
+    "says",
+    "told",
+    "like",
+    "get",
+    "going",
+}
+stop_words.update(custom_stopwords)
 
 # Lazy-load the ML model to keep shell commands fast
 sentiment_pipeline = None
@@ -243,8 +272,21 @@ def extract_article_text(soup, url=None):
     return soup.get_text(separator="\n", strip=True)
 
 
+# --- Category Texts for Cosine Similarity ---
+CATEGORY_TEXTS = {
+    "Technology": "apple google microsoft amazon facebook meta tesla spacex ai artificial intelligence software hardware crypto bitcoin blockchain phone laptop app",
+    "Politics": "senate congress white house president biden trump republican democrat election vote law policy government senator governor",
+    "Sports": "nba nfl mlb nhl soccer football basketball baseball playoffs championship lebron messi ronaldo game match team",
+    "Business": "stocks market wall street dow jones nasdaq economy business company ceo earnings profit investor shares ipo",
+    "Health": "health medical doctor hospital fda cdc virus vaccine disease medicine study",
+    "Entertainment": "movie film hollywood celebrity music album song grammy oscar actor actress tv show",
+    "Science": "science nasa space research discovery study climate environment planet mars",
+    "World News": "china russia ukraine europe asia africa middle east un united nations war conflict diplomacy",
+}
+
+
+# --- Sentiment Pipeline Loader ---
 def get_sentiment_pipeline():
-    """Initializes and returns the sentiment analysis pipeline using a thread-safe lock."""
     global sentiment_pipeline
     with pipeline_lock:
         if sentiment_pipeline is None:
@@ -259,31 +301,46 @@ def get_sentiment_pipeline():
     return sentiment_pipeline
 
 
+# --- Improved Keyword Extractor ---
+def extract_keywords(text, max_keywords=7):
+    text = text.lower()
+    words = re.findall(r"\b[a-z]+\b", text)
+    words = [w for w in words if w not in stop_words and len(w) > 3]
+    words = [lemmatizer.lemmatize(w) for w in words]
+    keyword_counts = Counter(words)
+    return [word for word, _ in keyword_counts.most_common(max_keywords)]
+
+
+# --- Category Detection via TF-IDF + Cosine Similarity ---
+def categorize_article(text):
+    texts = [text] + list(CATEGORY_TEXTS.values())
+    vectorizer = TfidfVectorizer().fit_transform(texts)
+    cosine_sim = cosine_similarity(vectorizer[0:1], vectorizer[1:]).flatten()
+    max_index = cosine_sim.argmax()
+    return (
+        list(CATEGORY_TEXTS.keys())[max_index] if cosine_sim[max_index] > 0 else "Other"
+    )
+
+
+# --- Final Analysis Function ---
 def get_local_analysis(text):
-    """Analyzes text using the local fine-tuned model and improved keyword logic."""
     print("--- Getting analysis from local model... ---", flush=True)
+
     pipeline = get_sentiment_pipeline()
 
+    # Sentiment
     result = pipeline(text[:512])[0]
     raw_score = result["score"]
     sentiment_score = (raw_score * 2) - 1
     sentiment_score = max(-1.0, min(1.0, sentiment_score))
 
-    # --- UPGRADED KEYWORD LOGIC ---
-    # Use NLTK's comprehensive list of English stop words
-    stop_words = set(stopwords.words("english"))
-    words = [
-        word
-        for word in re.findall(r"\b\w+\b", text.lower())
-        if word not in stop_words and len(word) > 3 and not word.isdigit()
-    ]
-    keywords = [word for word, _ in Counter(words).most_common(7)]
-    category = "General"
+    # Category via cosine similarity
+    category = categorize_article(text)
+
+    # Extract refined keywords
+    keywords = extract_keywords(text)
 
     return sentiment_score, keywords, category
-
-
-
 
 
 @app.route("/analyze", methods=["POST"])
