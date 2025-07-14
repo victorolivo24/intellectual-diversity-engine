@@ -248,64 +248,82 @@ function handleAnalysis() {
                 },
                 body: JSON.stringify({ url: currentTab.url })
             })
-                .then(response => {
+                .then(async response => {
+                    const contentType = response.headers.get('content-type') || '';
+
                     if (!response.ok) {
-                        return response.json().then(err => {
+                        if (contentType.includes('application/json')) {
+                            const err = await response.json();
+
+                            // 👇 Retry token logic
                             if (err.message && err.message.includes("Token is invalid")) {
-                                // try to refresh
-                                
-
-                                chrome.storage.sync.get(['refreshToken'], function (result) {
-                                    if (!result.refreshToken) {
-                                        resultsContainer.innerHTML = `
-                                        <div class="error-message">
-                                            ⚠️ Your session expired, please log in again.
-                                        </div>
-                                    `;
-                                        chrome.storage.sync.remove(['token', 'username']);
-                                        return;
-                                    }
-
-                                    fetch(`${API_URL}/refresh_token`, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ refresh_token: result.refreshToken })
-                                    })
-                                        .then(refreshRes => {
-                                            if (!refreshRes.ok) throw new Error("Refresh token invalid");
-                                            return refreshRes.json();
-                                        })
-                                        .then(newData => {
-                                        
-                                            chrome.storage.sync.set({ token: newData.token }, () => {
-                                                // retry the original analyze call
-                                                handleAnalysis();
-                                            });
-                                        })
-                                        .catch(() => {
+                                return new Promise((resolve, reject) => {
+                                    chrome.storage.sync.get(['refreshToken'], function (result) {
+                                        if (!result.refreshToken) {
                                             resultsContainer.innerHTML = `
-                                        <div class="error-message">
-                                            ⚠️ Could not refresh login. Please log in again.
-                                        </div>
-                                    `;
+                                            <div class="error-message">
+                                                ⚠️ Your session expired, please log in again.
+                                            </div>
+                                        `;
                                             chrome.storage.sync.remove(['token', 'username']);
-                                        });
+                                            return reject(new Error("No refresh token"));
+                                        }
+
+                                        fetch(`${API_URL}/refresh_token`, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ refresh_token: result.refreshToken })
+                                        })
+                                            .then(res => {
+                                                if (!res.ok) throw new Error("Refresh failed");
+                                                return res.json();
+                                            })
+                                            .then(newData => {
+                                                chrome.storage.sync.set({ token: newData.token }, () => {
+                                                    // Retry original request
+                                                    handleAnalysis();
+                                                    resolve(); // short-circuit this chain
+                                                });
+                                            })
+                                            .catch(error => {
+                                                let message = "⚠️ There was a network or server error reaching the analysis system.";
+                                                if (error.message.includes("CAPTCHA")) {
+                                                    message = "⚠️ This article is protected by a bot detection system (CAPTCHA) and cannot be analyzed.";
+                                                }
+                                                resultsContainer.innerHTML = `
+                                                    <div class="error-message">${message}</div>
+                                                `;
+                                            });
+                                            
+                                    });
                                 });
-                                throw new Error("Retrying with refresh token");
                             }
+
                             throw new Error(err.message || 'Analysis failed.');
-                        });
+                        } else {
+                            throw new Error("Non-JSON response from server");
+                        }
                     }
-                    return response.json();
+
+                    return contentType.includes('application/json')
+                        ? response.json()
+                        : Promise.reject("Expected JSON, got something else");
                 })
+            
+            
             
                 .then(data => {
                     if (data.data) {
                         renderResults(resultsContainer, data.data, null);
                     } else {
-                        renderResults(resultsContainer, null, data.message);
+                        resultsContainer.innerHTML = `
+                            <div class="error-message">
+                                ⚠️ ${data.message || "Could not analyze this article."}
+                            </div>
+                        `;
                     }
                 })
+                
                 .catch(error => {
                     resultsContainer.innerHTML = `
                         <div class="error-message">
