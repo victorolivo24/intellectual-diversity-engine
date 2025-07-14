@@ -21,6 +21,8 @@ from selenium.webdriver.support import expected_conditions as EC
 import secrets
 import threading
 from transformers import pipeline
+import nltk
+from nltk.corpus import stopwords
 
 # 2. Initial Setup
 load_dotenv()
@@ -30,6 +32,12 @@ app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
+
+try:
+    stopwords.words("english")
+except LookupError:
+    nltk.download("stopwords")
+
 
 # Lazy-load the ML model to keep shell commands fast
 sentiment_pipeline = None
@@ -154,12 +162,61 @@ def get_html(url):
 
 
 def extract_article_text(soup, url=None):
-    for tag in ["script", "style", "header", "footer", "nav", "aside"]:
+    # Remove irrelevant tags
+    for tag in [
+        "script",
+        "style",
+        "header",
+        "footer",
+        "nav",
+        "aside",
+        "form",
+        "noscript",
+    ]:
         for s in soup.select(tag):
             s.decompose()
-    article_tag = soup.find("article")
-    if article_tag:
-        return article_tag.get_text(separator="\n", strip=True)
+
+    # Primary selectors that often contain article content
+    selectors = [
+        "article",
+        "[role='main']",
+        "#main",
+        "#main-content",
+        ".main-content",
+        ".article-body",
+        ".entry-content",
+        ".post-content",
+        ".post-body",
+        ".story-body",
+        ".content__article-body",
+    ]
+
+    for selector in selectors:
+        element = soup.select_one(selector)
+        if element:
+            text = element.get_text(separator="\n", strip=True)
+            if len(text) > 250:
+                return text
+
+    # 🔍 Fallback 1: Try longest <div> block
+    divs = soup.find_all("div")
+    div_texts = [
+        div.get_text(separator="\n", strip=True)
+        for div in divs
+        if div and div.get_text(strip=True)
+    ]
+    if div_texts:
+        longest = max(div_texts, key=len)
+        if len(longest) > 250:
+            return longest
+
+    # 🔍 Fallback 2: Try concatenated <p> tags
+    paragraphs = soup.find_all("p")
+    combined = "\n".join([p.get_text(strip=True) for p in paragraphs])
+    if len(combined) > 250:
+        return combined
+
+    # 🧵 Final fallback: everything (already cleaned)
     return soup.get_text(separator="\n", strip=True)
 
 
@@ -168,7 +225,9 @@ def get_sentiment_pipeline():
     global sentiment_pipeline
     with pipeline_lock:
         if sentiment_pipeline is None:
-            print("--- First request: Loading custom sentiment model... ---", flush=True)
+            print(
+                "--- First request: Loading custom sentiment model... ---", flush=True
+            )
             model_path = "./out-of-the-loop-production-model"
             sentiment_pipeline = pipeline(
                 "sentiment-analysis", model=model_path, tokenizer=model_path
@@ -178,38 +237,26 @@ def get_sentiment_pipeline():
 
 
 def get_local_analysis(text):
-    """Analyzes text using the local fine-tuned model."""
-    print("--- Getting analysis from local model ---", flush=True)
+    """Analyzes text using the local fine-tuned model and improved keyword logic."""
+    print("--- Getting analysis from local model... ---", flush=True)
     pipeline = get_sentiment_pipeline()
+
     result = pipeline(text[:512])[0]
-    print("result", flush=True)
     raw_score = result["score"]
     sentiment_score = (raw_score * 2) - 1
     sentiment_score = max(-1.0, min(1.0, sentiment_score))
-    stop_words = set(
-        [
-            "the",
-            "a",
-            "an",
-            "in",
-            "on",
-            "of",
-            "and",
-            "to",
-            "for",
-            "is",
-            "are",
-            "was",
-            "were",
-        ]
-    )
+
+    # --- UPGRADED KEYWORD LOGIC ---
+    # Use NLTK's comprehensive list of English stop words
+    stop_words = set(stopwords.words("english"))
     words = [
         word
         for word in re.findall(r"\b\w+\b", text.lower())
-        if word not in stop_words and len(word) > 3
+        if word not in stop_words and len(word) > 3 and not word.isdigit()
     ]
     keywords = [word for word, _ in Counter(words).most_common(7)]
     category = "General"
+
     return sentiment_score, keywords, category
 
 
@@ -249,77 +296,37 @@ def login():
     )
 
 
-@app.route("/analyze", methods=["POST"])
+@app.route('/analyze', methods=['POST'])
 @token_required
 def analyze(current_user):
-    url = request.get_json().get("url")
-    if not url:
-        return jsonify({"message": "URL is required"}), 400
+    url = request.get_json().get('url')
+    if not url: return jsonify({'message': 'URL is required'}), 400
     existing = Article.query.filter_by(url=url).first()
     if existing:
         if existing not in current_user.articles:
-            current_user.articles.append(existing)
-            db.session.commit()
-        return jsonify(
-            {
-                "message": "Article added to history",
-                "data": {
-                    "title": existing.title,
-                    "sentiment": existing.sentiment_score,
-                    "keywords": existing.keywords,
-                    "category": existing.category,
-                },
-            }
-        )
+            current_user.articles.append(existing); db.session.commit()
+        return jsonify({'message': 'Article added to history', 'data': {'title': existing.title, 'sentiment': existing.sentiment_score, 'keywords': existing.keywords, 'category': existing.category }})
     try:
         html = get_html(url)
-        if not html:
-            raise ValueError("Could not retrieve HTML.")
-        soup = BeautifulSoup(html, "html.parser")
-        title = (
-            soup.find("title").get_text(strip=True)
-            if soup.find("title")
-            else "No Title"
-        )
+        if not html: raise ValueError("Could not retrieve HTML.")
+        soup = BeautifulSoup(html, 'html.parser')
+        title = soup.find("title").get_text(strip=True) if soup.find("title") else "No Title"
         text = extract_article_text(soup, url=url)
         if not text or len(text.strip()) < 100:
-            return (
-                jsonify(
-                    {
-                        "message": "Article content was unavailable or too short.",
-                        "data": None,
-                    }
-                ),
-                200,
-            )
+            return jsonify({"message": "Article content was unavailable or too short.", "data": None}), 200
         sentiment, keywords, category = get_local_analysis(text)
-        new_article = Article(
-            url=url,
-            title=title,
-            article_text=text,
-            sentiment_score=sentiment,
-            keywords=keywords,
-            category=category,
-        )
-        db.session.add(new_article)
-        current_user.articles.append(new_article)
-        db.session.commit()
-        return jsonify(
-            {
-                "message": "Article analyzed",
-                "data": {
-                    "title": title,
-                    "sentiment": sentiment,
-                    "keywords": keywords,
-                    "category": category,
-                },
-            }
-        )
+        new_article = Article(url=url, title=title, article_text=text, sentiment_score=sentiment, keywords=keywords, category=category)
+        db.session.add(new_article); current_user.articles.append(new_article); db.session.commit()
+        return jsonify({'message': 'Article analyzed', 'data': {'title': title, 'sentiment': sentiment, 'keywords': keywords, 'category': category }})
     except Exception as e:
-        print(f"EXCEPTION in /analyze: {e}")
-        print(f"[DEBUG] token invalid: {e}")
+        # ENHANCED ERROR LOGGING
+        import traceback
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", flush=True)
+        print(f"--- EXCEPTION CAUGHT IN /analyze ROUTE: {e} ---", flush=True)
+        traceback.print_exc()
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", flush=True)
         db.session.rollback()
-        return jsonify({"message": str(e)}), 500
+        return jsonify({'message': 'A server error occurred. Please check the backend logs for details.'}), 500
 
 
 @app.route('/generate_sso_ticket', methods=['POST'])
