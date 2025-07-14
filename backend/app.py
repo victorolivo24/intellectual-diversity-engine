@@ -129,33 +129,58 @@ DEFAULT_TOPICS = [
 
 
 def get_html(url):
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/115.0.0.0 Safari/537.36"
+        )
+    }
+
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
-        }
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
-        temp_soup = BeautifulSoup(response.text, "html.parser")
-        temp_text = extract_article_text(temp_soup, url=url)
-        if len(temp_text) > 250:
-            return response.text
-    except requests.RequestException as e:
-        print(f"--- Simple request failed: {e}. Falling back to Selenium. ---")
+        html = response.text
 
+        # Check for common CAPTCHA blocks (e.g. DataDome)
+        if "captcha-delivery.com" in html.lower() or "datadome" in html.lower():
+            raise Exception(
+                "CAPTCHA detected: This site is protected and cannot be scraped."
+            )
+
+        soup = BeautifulSoup(html, "html.parser")
+        if len(extract_article_text(soup, url=url)) > 250:
+            return html
+
+    except requests.RequestException:
+        pass  # Continue to Selenium fallback
+
+    # Fallback to Selenium
     driver = None
     try:
-        print("--- Launching Selenium fallback ---")
         options = Options()
         options.add_argument("--headless")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         driver = webdriver.Chrome(service=Service(), options=options)
         driver.get(url)
-        WebDriverWait(driver, 8).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "article,body"))
+
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, "article, [role='main'], .article-body, #main")
+            )
         )
-        time.sleep(2)
-        return driver.page_source
+
+        html = driver.page_source
+
+        # CAPTCHA fallback detection
+        if "captcha-delivery.com" in html.lower() or "datadome" in html.lower():
+            raise Exception(
+                "CAPTCHA detected during Selenium fallback: Cannot analyze this page."
+            )
+
+        return html
+
     finally:
         if driver:
             driver.quit()
@@ -184,11 +209,9 @@ def extract_article_text(soup, url=None):
         "#main-content",
         ".main-content",
         ".article-body",
-        ".entry-content",
         ".post-content",
-        ".post-body",
-        ".story-body",
         ".content__article-body",
+        ".StandardArticleBody_body",  # common on Reuters
     ]
 
     for selector in selectors:
@@ -296,37 +319,76 @@ def login():
     )
 
 
-@app.route('/analyze', methods=['POST'])
+@app.route("/analyze", methods=["POST"])
 @token_required
 def analyze(current_user):
-    url = request.get_json().get('url')
-    if not url: return jsonify({'message': 'URL is required'}), 400
+    url = request.get_json().get("url")
+    if not url:
+        return jsonify({"message": "URL is required"}), 400
+
     existing = Article.query.filter_by(url=url).first()
     if existing:
         if existing not in current_user.articles:
-            current_user.articles.append(existing); db.session.commit()
-        return jsonify({'message': 'Article added to history', 'data': {'title': existing.title, 'sentiment': existing.sentiment_score, 'keywords': existing.keywords, 'category': existing.category }})
+            current_user.articles.append(existing)
+            db.session.commit()
+        return jsonify(
+            {
+                "message": "Article added to history",
+                "data": {
+                    "title": existing.title,
+                    "sentiment": existing.sentiment_score,
+                    "keywords": existing.keywords,
+                    "category": existing.category,
+                    "article_text": existing.article_text,
+                },
+            }
+        )
+
     try:
         html = get_html(url)
-        if not html: raise ValueError("Could not retrieve HTML.")
-        soup = BeautifulSoup(html, 'html.parser')
-        title = soup.find("title").get_text(strip=True) if soup.find("title") else "No Title"
+        if not html:
+            raise Exception("Failed to retrieve article content.")
+
+        soup = BeautifulSoup(html, "html.parser")
+        title = soup.title.string.strip() if soup.title else "Untitled"
         text = extract_article_text(soup, url=url)
+
         if not text or len(text.strip()) < 100:
-            return jsonify({"message": "Article content was unavailable or too short.", "data": None}), 200
+            return (
+                jsonify({"message": "⚠️ Article content was unavailable or too short."}),
+                200,
+            )
+
         sentiment, keywords, category = get_local_analysis(text)
-        new_article = Article(url=url, title=title, article_text=text, sentiment_score=sentiment, keywords=keywords, category=category)
-        db.session.add(new_article); current_user.articles.append(new_article); db.session.commit()
-        return jsonify({'message': 'Article analyzed', 'data': {'title': title, 'sentiment': sentiment, 'keywords': keywords, 'category': category }})
+
+        new_article = Article(
+            url=url,
+            title=title,
+            article_text=text,
+            sentiment_score=sentiment,
+            keywords=keywords,
+            category=category,
+        )
+        db.session.add(new_article)
+        current_user.articles.append(new_article)
+        db.session.commit()
+
+        return jsonify(
+            {
+                "message": "Article analyzed",
+                "data": {
+                    "title": title,
+                    "sentiment": sentiment,
+                    "keywords": keywords,
+                    "category": category,
+                    "article_text": text,
+                },
+            }
+        )
+
     except Exception as e:
-        # ENHANCED ERROR LOGGING
-        import traceback
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", flush=True)
-        print(f"--- EXCEPTION CAUGHT IN /analyze ROUTE: {e} ---", flush=True)
-        traceback.print_exc()
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", flush=True)
         db.session.rollback()
-        return jsonify({'message': 'A server error occurred. Please check the backend logs for details.'}), 500
+        return jsonify({"message": str(e)}), 200
 
 
 @app.route('/generate_sso_ticket', methods=['POST'])
