@@ -283,40 +283,7 @@ def get_local_analysis(text):
     return sentiment_score, keywords, category
 
 
-# 6. API Routes
-@app.route("/register", methods=["POST"])
-def register():
-    data = request.get_json()
-    u, p = data.get("username"), data.get("password")
-    if not u or not p:
-        return jsonify({"message": "Username and password required"}), 400
-    if User.query.filter_by(username=u).first():
-        return jsonify({"message": "Username already exists"}), 400
-    user = User(username=u)
-    user.set_password(p)
-    db.session.add(user)
-    db.session.commit()
-    return jsonify({"message": "User registered successfully"})
 
-
-@app.route("/login", methods=["POST"])
-def login():
-    data = request.get_json()
-    u, p = data.get("username"), data.get("password")
-    user = User.query.filter_by(username=u).first()
-    if not user or not user.check_password(p):
-        return jsonify({"message": "Invalid credentials"}), 401
-    token = jwt.encode(
-        {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
-        app.config["SECRET_KEY"],
-        "HS256",
-    )
-    refresh_token = secrets.token_urlsafe(64)
-    user.refresh_token = refresh_token
-    db.session.commit()
-    return jsonify(
-        {"token": token, "refresh_token": refresh_token, "username": user.username}
-    )
 
 
 @app.route("/analyze", methods=["POST"])
@@ -471,54 +438,170 @@ def redeem_sso_ticket():
         "username": user.username
     })
 
-@app.route('/source_analysis', methods=['GET'])
+
+# 6. API Routes
+@app.route("/register", methods=["POST"])
+def register():
+    data = request.get_json()
+    u, p = data.get("username"), data.get("password")
+    if not u or not p:
+        return jsonify({"message": "Username and password required"}), 400
+    if User.query.filter_by(username=u).first():
+        return jsonify({"message": "Username already exists"}), 400
+    user = User(username=u)
+    user.set_password(p)
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({"message": "User registered successfully"})
+
+
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+    u, p = data.get("username"), data.get("password")
+    user = User.query.filter_by(username=u).first()
+    if not user or not user.check_password(p):
+        return jsonify({"message": "Invalid credentials"}), 401
+    token = jwt.encode(
+        {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
+        app.config["SECRET_KEY"],
+        "HS256",
+    )
+    refresh_token = secrets.token_urlsafe(64)
+    user.refresh_token = refresh_token
+    db.session.commit()
+    return jsonify(
+        {"token": token, "refresh_token": refresh_token, "username": user.username}
+    )
+
+# --- DASHBOARD & TOPIC ROUTES ---
+@app.route("/dashboard", methods=["GET"])
+@token_required
+def dashboard(current_user):
+    articles = [
+        {
+            "id": a.id,
+            "title": a.title,
+            "url": a.url,
+            "sentiment": a.sentiment_score,
+            "keywords": a.keywords,
+            "category": a.category,
+        }
+        for a in current_user.articles
+    ]
+    return jsonify(articles)
+
+
+@app.route("/category_analysis", methods=["GET"])
+@token_required
+def category_analysis(current_user):
+    category_sentiments = defaultdict(lambda: {"total_score": 0, "count": 0})
+    for article in current_user.articles:
+        if article.category and article.sentiment_score is not None:
+            category_sentiments[article.category][
+                "total_score"
+            ] += article.sentiment_score
+            category_sentiments[article.category]["count"] += 1
+    analysis_results = [
+        {
+            "category": cat,
+            "average_sentiment": data["total_score"] / data["count"],
+            "article_count": data["count"],
+        }
+        for cat, data in category_sentiments.items()
+        if data["count"] > 0
+    ]
+    analysis_results.sort(key=lambda x: (-x["article_count"], x["category"]))
+    return jsonify(analysis_results)
+
+
+@app.route("/source_analysis", methods=["GET"])
 @token_required
 def source_analysis(current_user):
-    """Parses the domain from each article URL and returns a count for each."""
-    # Using 'www.' prefix can lead to duplicates (e.g., www.cnn.com and cnn.com)
-    # This logic cleans it up.
     domains = [
-        urlparse(article.url).netloc.replace('www.', '') 
+        urlparse(article.url).netloc.replace("www.", "")
         for article in current_user.articles
     ]
     domain_counts = Counter(domains)
-    
-    # Sort by count descending, then by domain name alphabetically
     sorted_domains = sorted(domain_counts.items(), key=lambda item: (-item[1], item[0]))
-    
-    result = [{'domain': domain, 'count': count} for domain, count in sorted_domains]
+    result = [{"domain": domain, "count": count} for domain, count in sorted_domains]
     return jsonify(result)
 
 
-@app.route('/sentiment_timeline', methods=['GET'])
+@app.route("/sentiment_timeline", methods=["GET"])
 @token_required
 def sentiment_timeline(current_user):
-    """Groups articles by date and calculates the average sentiment for each day."""
     daily_sentiments = defaultdict(list)
-
     for article in current_user.articles:
-        # Group scores by date
-        day = article.retrieved_at.strftime('%Y-%m-%d')
+        day = article.retrieved_at.strftime("%Y-%m-%d")
         daily_sentiments[day].append(article.sentiment_score)
-
-    # Calculate the average for each day
-    analysis_results = []
-    for day, scores in daily_sentiments.items():
-        if scores:
-            average = sum(scores) / len(scores)
-            analysis_results.append({'date': day, 'average_sentiment': average})
-
-    # Sort by date
-    analysis_results.sort(key=lambda item: item['date'])
-
+    analysis_results = [
+        {"date": day, "average_sentiment": sum(scores) / len(scores)}
+        for day, scores in daily_sentiments.items()
+        if scores
+    ]
+    analysis_results.sort(key=lambda item: item["date"])
     return jsonify(analysis_results)
+
+
+@app.route("/topics", methods=["GET"])
+@token_required
+def get_topics(current_user):
+    custom_topics = [
+        topic.name for topic in UserTopic.query.filter_by(user_id=current_user.id).all()
+    ]
+    return jsonify(
+        {"default_topics": DEFAULT_TOPICS, "custom_topics": sorted(custom_topics)}
+    )
+
+
+@app.route("/topics", methods=["POST"])
+@token_required
+def create_topic(current_user):
+    data = request.get_json()
+    new_topic_name = data.get("name", "").strip()
+    if not new_topic_name or len(new_topic_name) > 50:
+        return jsonify({"message": "Invalid topic name"}), 400
+    existing_custom = UserTopic.query.filter_by(
+        user_id=current_user.id, name=new_topic_name
+    ).first()
+    if new_topic_name in DEFAULT_TOPICS or existing_custom:
+        return jsonify({"message": "Topic already exists"}), 409
+    topic = UserTopic(name=new_topic_name, user_id=current_user.id)
+    db.session.add(topic)
+    db.session.commit()
+    return jsonify({"message": "Topic created successfully"}), 201
+
+
+@app.route("/topics/<string:topic_name>", methods=["DELETE"])
+@token_required
+def delete_topic(current_user, topic_name):
+    if topic_name in DEFAULT_TOPICS:
+        return jsonify({"message": "Cannot delete a default topic"}), 403
+    topic_to_delete = UserTopic.query.filter_by(
+        user_id=current_user.id, name=topic_name
+    ).first()
+    if not topic_to_delete:
+        return jsonify({"message": "Custom topic not found"}), 404
+    articles_in_topic = Article.query.filter(
+        Article.readers.any(id=current_user.id), Article.category == topic_name
+    ).first()
+    if articles_in_topic:
+        return (
+            jsonify(
+                {"message": "Cannot delete topic. Articles are still assigned to it."}
+            ),
+            409,
+        )
+    db.session.delete(topic_to_delete)
+    db.session.commit()
+    return jsonify({"message": "Topic deleted successfully"})
 
 
 @app.route("/refresh_token", methods=["POST"])
 def refresh_token():
     data = request.get_json()
     incoming_refresh = data.get("refresh_token")
-
 
     if not incoming_refresh:
         return jsonify({"message": "Missing refresh token"}), 400
