@@ -1,4 +1,3 @@
-# 1. All import statements
 import datetime as dt
 import json, os, re, time
 from collections import Counter, defaultdict
@@ -32,7 +31,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import threading
 
-# 2. Initial Setup
+# initialize Flask app with database 
 load_dotenv()
 app = Flask(__name__)
 CORS(app)
@@ -40,13 +39,15 @@ app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
-
+# specify path to nltk data
 nltk.data.path.append("C:/Users/victo/AppData/Roaming/nltk_data")
 
-# --- Global Setup ---
+# global setup with empty placeholder for fast initial startup of Flask
 pipeline_lock = threading.Lock()
 sentiment_pipeline = None
+# root words for keyword list
 lemmatizer = WordNetLemmatizer()
+# buld stopwords set
 stop_words = set(stopwords.words("english"))
 custom_stopwords = {
     "reuters",
@@ -68,22 +69,20 @@ custom_stopwords = {
 }
 stop_words.update(custom_stopwords)
 
-# Lazy-load the ML model to keep shell commands fast
-sentiment_pipeline = None
-pipeline_lock = threading.Lock()
-
-# 3. Database Models
+# Database Models
+# association table for User and Article - many users read many articles 
 reading_list = db.Table(
     "reading_list",
     db.Column("user_id", db.Integer, db.ForeignKey("user.id"), primary_key=True),
     db.Column("article_id", db.Integer, db.ForeignKey("article.id"), primary_key=True),
 )
 
-
+# user model
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
+    # relationship for many-many setup, lazy loading to load articles only when user.articles used- keeps fast and efficient
     articles = db.relationship(
         "Article", secondary=reading_list, backref=db.backref("readers", lazy=True)
     )
@@ -98,17 +97,20 @@ class User(db.Model):
 
 class Article(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    # store each article once - reuse, no duplicates
     url = db.Column(db.String(500), unique=True, nullable=False)
     title = db.Column(db.String(500), nullable=False)
     article_text = db.Column(db.Text, nullable=False)
+    # time stamp for when article was added
     retrieved_at = db.Column(
         db.DateTime, nullable=False, default=dt.datetime.utcnow
-    )  # Corrected
+    )  
+    # store results of analysis
     sentiment_score = db.Column(db.Float, nullable=True)
     keywords = db.Column(db.JSON, nullable=True)
     category = db.Column(db.String(50), nullable=True)
 
-
+# temporary single-use tickets for secure login flow
 class SsoTicket(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     ticket = db.Column(db.String(100), unique=True, nullable=False, index=True)
@@ -116,7 +118,7 @@ class SsoTicket(db.Model):
     expires_at = db.Column(db.DateTime, nullable=False)
     is_used = db.Column(db.Boolean, default=False, nullable=False)
 
-
+# custom topics created by user
 class UserTopic(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), nullable=False)
@@ -124,24 +126,27 @@ class UserTopic(db.Model):
     __table_args__ = (db.UniqueConstraint("name", "user_id", name="_user_topic_uc"),)
 
 
-# 4. Token Decorator
+# Token Decorator wrapper function used with @token_required in /analyze or /dashboard functions
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        # check headers for user login token
         token = request.headers.get("x-access-token")
         if not token:
-            return jsonify({"message": "Token is missing!"}), 401
+            return jsonify({"message": "Token is missing"}), 401
         try:
             data = jwt.decode(token, app.config["SECRET_KEY"], algorithms=["HS256"])
+            # valid token , fetch user object
             current_user = db.session.get(User, data["id"])
         except:
-            return jsonify({"message": "Token is invalid!"}), 401
+            # token expired or user ID doesn't exist
+            return jsonify({"message": "Token is invalid"}), 401
         return f(current_user, *args, **kwargs)
 
     return decorated
 
 
-# 5. Helper Functions
+# outline default topics
 DEFAULT_TOPICS = [
     "Politics",
     "Technology",
@@ -158,6 +163,7 @@ DEFAULT_TOPICS = [
 
 
 def get_html(url):
+    # First: simple fast request- disguise as chrome browser on windows computer to prevent being blocked
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -168,6 +174,7 @@ def get_html(url):
 
     try:
         response = requests.get(url, headers=headers, timeout=15)
+        # check for error code
         response.raise_for_status()
         html = response.text
 
@@ -176,8 +183,9 @@ def get_html(url):
             raise Exception(
                 "CAPTCHA detected: This site is protected and cannot be scraped."
             )
-
+        # transform raw HTML into soup object
         soup = BeautifulSoup(html, "html.parser")
+        # more than 250 characters
         if len(extract_article_text(soup, url=url)) > 250:
             return html
 
@@ -187,13 +195,15 @@ def get_html(url):
     # Fallback to Selenium
     driver = None
     try:
+        # configure Selenium browser, run without UI
         options = Options()
         options.add_argument("--headless")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
+        # launch instance of Chrome browser and navigate to url
         driver = webdriver.Chrome(service=Service(), options=options)
         driver.get(url)
-
+        # wait 10 seconds for common article container tag (in case JavaScript content loads after initial page load)
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located(
                 (By.CSS_SELECTOR, "article, [role='main'], .article-body, #main")
@@ -202,7 +212,7 @@ def get_html(url):
 
         html = driver.page_source
 
-        # CAPTCHA fallback detection
+        # re-check CAPTCHA keywords before returning html
         if "captcha-delivery.com" in html.lower() or "datadome" in html.lower():
             raise Exception(
                 "CAPTCHA detected during Selenium fallback: Cannot analyze this page."
