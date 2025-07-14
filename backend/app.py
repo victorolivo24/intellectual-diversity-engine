@@ -240,7 +240,7 @@ def login():
     if not user or not user.check_password(p):
         return jsonify({"message": "Invalid credentials"}), 401
     token = jwt.encode(
-        {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
+        {"id": user.id, "exp": dt.dt.datetime.utcnow() + dt.dt.timedelta(hours=24)},
         app.config["SECRET_KEY"],
         "HS256",
     )
@@ -328,7 +328,7 @@ def generate_sso_ticket(current_user):
     """Generates a secure, single-use ticket for a logged-in user."""
     ticket_string = secrets.token_urlsafe(32)
     # Use utcnow() to create a naive datetime object in UTC
-    expiration = datetime.utcnow() + timedelta(seconds=60)
+    expiration = dt.datetime.utcnow() + dt.timedelta(seconds=60)
     
     new_ticket = SsoTicket(
         ticket=ticket_string,
@@ -353,7 +353,7 @@ def redeem_sso_ticket():
     sso_ticket = SsoTicket.query.filter_by(ticket=ticket_string).first()
 
     # Use utcnow() for simple, naive UTC datetime comparison
-    if not sso_ticket or sso_ticket.is_used or sso_ticket.expires_at < datetime.utcnow():
+    if not sso_ticket or sso_ticket.is_used or sso_ticket.expires_at < dt.datetime.utcnow():
         return jsonify({'message': 'Invalid or expired ticket'}), 401
 
     # Mark ticket as used
@@ -364,7 +364,7 @@ def redeem_sso_ticket():
 
     # generate short-lived JWT (30 min)
     token = jwt.encode(
-        {"id": user.id, "exp": datetime.utcnow() + timedelta(hours=24)},
+        {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
         app.config['SECRET_KEY'],
         "HS256"
     )
@@ -441,7 +441,7 @@ def refresh_token():
 
     # issue a fresh JWT
     token = jwt.encode(
-        {"id": user.id, "exp": datetime.utcnow() + timedelta(minutes=30)},
+        {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(minutes=30)},
         app.config["SECRET_KEY"],
         "HS256",
     )
