@@ -1,3 +1,4 @@
+# 1. All import statements
 import datetime as dt
 import json, os, re, time
 from collections import Counter, defaultdict
@@ -63,7 +64,9 @@ class Article(db.Model):
     url = db.Column(db.String(500), unique=True, nullable=False)
     title = db.Column(db.String(500), nullable=False)
     article_text = db.Column(db.Text, nullable=False)
-    retrieved_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
+    retrieved_at = db.Column(
+        db.DateTime, nullable=False, default=dt.datetime.utcnow
+    )  # Corrected
     sentiment_score = db.Column(db.Float, nullable=True)
     keywords = db.Column(db.JSON, nullable=True)
     category = db.Column(db.String(50), nullable=True)
@@ -131,7 +134,6 @@ def get_html(url):
     except requests.RequestException as e:
         print(f"--- Simple request failed: {e}. Falling back to Selenium. ---")
 
-    # Fallback to Selenium
     driver = None
     try:
         print("--- Launching Selenium fallback ---")
@@ -166,19 +168,21 @@ def get_sentiment_pipeline():
     global sentiment_pipeline
     with pipeline_lock:
         if sentiment_pipeline is None:
-            print("--- First request: Loading custom sentiment model... ---")
+            print("--- First request: Loading custom sentiment model... ---", flush=True)
             model_path = "./out-of-the-loop-production-model"
             sentiment_pipeline = pipeline(
                 "sentiment-analysis", model=model_path, tokenizer=model_path
             )
-            print("--- Sentiment model loaded successfully. ---")
+            print("--- Sentiment model loaded successfully. ---", flush=True)
     return sentiment_pipeline
 
 
 def get_local_analysis(text):
     """Analyzes text using the local fine-tuned model."""
+    print("--- Getting analysis from local model ---", flush=True)
     pipeline = get_sentiment_pipeline()
     result = pipeline(text[:512])[0]
+    print("result", flush=True)
     raw_score = result["score"]
     sentiment_score = (raw_score * 2) - 1
     sentiment_score = max(-1.0, min(1.0, sentiment_score))
@@ -197,13 +201,6 @@ def get_local_analysis(text):
             "are",
             "was",
             "were",
-            "it",
-            "i",
-            "you",
-            "he",
-            "she",
-            "they",
-            "we",
         ]
     )
     words = [
@@ -240,7 +237,7 @@ def login():
     if not user or not user.check_password(p):
         return jsonify({"message": "Invalid credentials"}), 401
     token = jwt.encode(
-        {"id": user.id, "exp": dt.dt.datetime.utcnow() + dt.dt.timedelta(hours=24)},
+        {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
         app.config["SECRET_KEY"],
         "HS256",
     )
@@ -271,7 +268,6 @@ def analyze(current_user):
                     "sentiment": existing.sentiment_score,
                     "keywords": existing.keywords,
                     "category": existing.category,
-                    "article_text": existing.article_text,
                 },
             }
         )
@@ -288,12 +284,15 @@ def analyze(current_user):
         text = extract_article_text(soup, url=url)
         if not text or len(text.strip()) < 100:
             return (
-                jsonify({"message": "Article content was unavailable or too short."}),
+                jsonify(
+                    {
+                        "message": "Article content was unavailable or too short.",
+                        "data": None,
+                    }
+                ),
                 200,
             )
-
         sentiment, keywords, category = get_local_analysis(text)
-
         new_article = Article(
             url=url,
             title=title,
@@ -313,11 +312,12 @@ def analyze(current_user):
                     "sentiment": sentiment,
                     "keywords": keywords,
                     "category": category,
-                    "article_text": text,
                 },
             }
         )
     except Exception as e:
+        print(f"EXCEPTION in /analyze: {e}")
+        print(f"[DEBUG] token invalid: {e}")
         db.session.rollback()
         return jsonify({"message": str(e)}), 500
 
