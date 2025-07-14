@@ -388,7 +388,26 @@ def analyze(current_user):
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({"message": str(e)}), 200
+        known_captcha_errors = [
+            "CAPTCHA detected",
+            "403 Client Error",
+            "Forbidden",
+            "Access denied"
+        ]
+        
+        message = str(e)
+        if any(phrase in message for phrase in known_captcha_errors):
+            user_friendly_msg = (
+                "This article appears to be protected by a bot detection system (e.g. CAPTCHA). "
+                "We were unable to analyze it automatically."
+            )
+        else:
+            user_friendly_msg = (
+                "An unexpected error occurred while analyzing this article. "
+                "It may not be compatible with our system."
+            )
+
+        return jsonify({"message": user_friendly_msg}), 200
 
 
 @app.route('/generate_sso_ticket', methods=['POST'])
