@@ -31,7 +31,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import threading
 
-# initialize Flask app with database 
+# initialize Flask app with database
 load_dotenv()
 app = Flask(__name__)
 CORS(app)
@@ -70,7 +70,7 @@ custom_stopwords = {
 stop_words.update(custom_stopwords)
 
 # Database Models
-# association table for User and Article - many users read many articles 
+# association table for User and Article - many users read many articles
 reading_list = db.Table(
     "reading_list",
     db.Column("user_id", db.Integer, db.ForeignKey("user.id"), primary_key=True),
@@ -224,10 +224,10 @@ def get_html(url):
         if driver:
             driver.quit()
 
-
+# find article from soup
 def extract_article_text(soup, url=None):
     # Remove irrelevant tags
-    for tag in [
+    irrelevant_tags = [
         "script",
         "style",
         "header",
@@ -236,7 +236,8 @@ def extract_article_text(soup, url=None):
         "aside",
         "form",
         "noscript",
-    ]:
+    ]
+    for tag in irrelevant_tags:
         for s in soup.select(tag):
             s.decompose()
 
@@ -250,7 +251,7 @@ def extract_article_text(soup, url=None):
         ".article-body",
         ".post-content",
         ".content__article-body",
-        ".StandardArticleBody_body",  # common on Reuters
+        ".StandardArticleBody_body",    
     ]
 
     for selector in selectors:
@@ -260,17 +261,21 @@ def extract_article_text(soup, url=None):
             if len(text) > 250:
                 return text
 
-    # 🔍 Fallback 1: Try longest <div> block
+    # plan b if text is not in one of primary selectors, look for div with largest block of text
     divs = soup.find_all("div")
-    div_texts = [
-        div.get_text(separator="\n", strip=True)
-        for div in divs
-        if div and div.get_text(strip=True)
-    ]
-    if div_texts:
-        longest = max(div_texts, key=len)
-        if len(longest) > 250:
-            return longest
+    div_texts = []
+    longest_text = ""
+    max_len = 0
+    for div in divs:
+        if div:
+            text = div.get_text(separator="\n", strip=True)
+            if len(text) > max_len:
+                max_len = len(text)
+                longest_text = text
+ 
+    
+    if len(longest_text) > 250:
+        return longest_text
 
     # 🔍 Fallback 2: Try concatenated <p> tags
     paragraphs = soup.find_all("p")
