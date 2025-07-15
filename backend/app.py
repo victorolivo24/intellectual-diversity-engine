@@ -263,7 +263,6 @@ def extract_article_text(soup, url=None):
 
     # plan b if text is not in one of primary selectors, look for div with largest block of text
     divs = soup.find_all("div")
-    div_texts = []
     longest_text = ""
     max_len = 0
     for div in divs:
@@ -273,37 +272,25 @@ def extract_article_text(soup, url=None):
                 max_len = len(text)
                 longest_text = text
  
-    
+    # return if larger than 250 characters
     if len(longest_text) > 250:
         return longest_text
 
-    # 🔍 Fallback 2: Try concatenated <p> tags
+    # 
     paragraphs = soup.find_all("p")
-    combined = "\n".join([p.get_text(strip=True) for p in paragraphs])
-    if len(combined) > 250:
-        return combined
+    combined_paragraphs = "\n".join([p.get_text(strip=True) for p in paragraphs])
+    if len(combined_paragraphs) > 250:
+        return combined_paragraphs
 
-    # 🧵 Final fallback: everything (already cleaned)
+    # can't find container for text body, return all text
     return soup.get_text(separator="\n", strip=True)
 
-
-# --- Category Texts for Cosine Similarity ---
-CATEGORY_TEXTS = {
-    "Technology": "apple google microsoft amazon facebook meta tesla spacex ai artificial intelligence software hardware crypto bitcoin blockchain phone laptop app",
-    "Politics": "senate congress white house president biden trump republican democrat election vote law policy government senator governor",
-    "Sports": "nba nfl mlb nhl soccer football basketball baseball playoffs championship lebron messi ronaldo game match team",
-    "Business": "stocks market wall street dow jones nasdaq economy business company ceo earnings profit investor shares ipo",
-    "Health": "health medical doctor hospital fda cdc virus vaccine disease medicine study",
-    "Entertainment": "movie film hollywood celebrity music album song grammy oscar actor actress tv show",
-    "Science": "science nasa space research discovery study climate environment planet mars",
-    "World News": "china russia ukraine europe asia africa middle east un united nations war conflict diplomacy",
-}
-
-
-# --- Sentiment Pipeline Loader ---
+# load large AI model into memory efficiently (lazy loading)
 def get_sentiment_pipeline():
     global sentiment_pipeline
+    # load requests one at a time to prevent race condition
     with pipeline_lock:
+        # load model for first time
         if sentiment_pipeline is None:
             print(
                 "--- First request: Loading custom sentiment model... ---", flush=True
@@ -316,26 +303,47 @@ def get_sentiment_pipeline():
     return sentiment_pipeline
 
 
-# --- Improved Keyword Extractor ---
+# extract keywords from raw text
 def extract_keywords(text, max_keywords=7):
     text = text.lower()
+    # find all words (tokenize text)
     words = re.findall(r"\b[a-z]+\b", text)
     words = [w for w in words if w not in stop_words and len(w) > 3]
+    # reduce words to root form
     words = [lemmatizer.lemmatize(w) for w in words]
+    # dict for frequency of words
     keyword_counts = Counter(words)
+    # return most frequent words sorted from most to least frequent counts
     return [word for word, _ in keyword_counts.most_common(max_keywords)]
 
+# Category Texts for Cosine Similarity
+CATEGORY_TEXTS = {
+    "Technology": "apple google microsoft amazon facebook meta tesla spacex ai artificial intelligence software hardware crypto bitcoin blockchain phone laptop app",
+    "Politics": "senate congress white house president biden trump republican democrat election vote law policy government senator governor",
+    "Sports": "nba nfl mlb nhl soccer football basketball baseball playoffs championship lebron messi ronaldo game match team",
+    "Business": "stocks market wall street dow jones nasdaq economy business company ceo earnings profit investor shares ipo",
+    "Health": "health medical doctor hospital fda cdc virus vaccine disease medicine study",
+    "Entertainment": "movie film hollywood celebrity music album song grammy oscar actor actress tv show",
+    "Science": "science nasa space research discovery study climate environment planet mars",
+    "World News": "china russia ukraine europe asia africa middle east un united nations war conflict diplomacy",
+}
 
-# --- Category Detection via TF-IDF + Cosine Similarity ---
+CATEGORY_FINGERPRINTS = list(CATEGORY_TEXTS.values())
+CATEGORY_NAMES = list(CATEGORY_TEXTS.keys())
+
+# Category Detection via TF-IDF + Cosine Similarity
 def categorize_article(text):
-    texts = [text] + list(CATEGORY_TEXTS.values())
+    # group article and strings of keywords
+    texts = [text] + CATEGORY_FINGERPRINTS
+    # convert text to numerical representation as vector with weights
     vectorizer = TfidfVectorizer().fit_transform(texts)
+    # calculate similarity between two vectors for each category
     cosine_sim = cosine_similarity(vectorizer[0:1], vectorizer[1:]).flatten()
+    # find and return category with highest similarity score
     max_index = cosine_sim.argmax()
     return (
-        list(CATEGORY_TEXTS.keys())[max_index] if cosine_sim[max_index] > 0 else "Other"
+        CATEGORY_NAMES[max_index] if cosine_sim[max_index] > 0.1 else "Other"
     )
-
 
 # --- Final Analysis Function ---
 def get_local_analysis(text):
@@ -511,7 +519,6 @@ def redeem_sso_ticket():
     })
 
 
-# 6. API Routes
 @app.route("/register", methods=["POST"])
 def register():
     data = request.get_json()
