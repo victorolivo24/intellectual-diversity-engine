@@ -464,7 +464,7 @@ def analyze(current_user):
 
         return jsonify({"message": user_friendly_msg}), 200
 
-
+# Single Sign-On (SSO) Routes
 @app.route('/generate_sso_ticket', methods=['POST'])
 @token_required
 def generate_sso_ticket(current_user):
@@ -526,6 +526,7 @@ def redeem_sso_ticket():
         "username": user.username
     })
 
+# Authentication Routes
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -562,6 +563,29 @@ def login():
     )
 
 
+@app.route("/refresh_token", methods=["POST"])
+def refresh_token():
+    data = request.get_json()
+    incoming_refresh = data.get("refresh_token")
+
+    if not incoming_refresh:
+        return jsonify({"message": "Missing refresh token"}), 400
+
+    user = User.query.filter_by(refresh_token=incoming_refresh).first()
+    if not user:
+        return jsonify({"message": "Invalid refresh token"}), 401
+
+    # issue a fresh JWT
+    token = jwt.encode(
+        {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(minutes=30)},
+        app.config["SECRET_KEY"],
+        "HS256",
+    )
+    print(f"Refreshed token for user: {user.username}")
+
+    return jsonify({"token": token})
+
+# Dashboard Data Endpoints
 @app.route("/dashboard", methods=["GET"])
 @token_required
 def dashboard(current_user):
@@ -630,7 +654,7 @@ def sentiment_timeline(current_user):
     analysis_results.sort(key=lambda item: item["date"])
     return jsonify(analysis_results)
 
-
+# Topic Mangement Routes
 @app.route("/topics", methods=["GET"])
 @token_required
 def get_topics(current_user):
@@ -683,29 +707,6 @@ def delete_topic(current_user, topic_name):
     db.session.delete(topic_to_delete)
     db.session.commit()
     return jsonify({"message": "Topic deleted successfully"})
-
-
-@app.route("/refresh_token", methods=["POST"])
-def refresh_token():
-    data = request.get_json()
-    incoming_refresh = data.get("refresh_token")
-
-    if not incoming_refresh:
-        return jsonify({"message": "Missing refresh token"}), 400
-
-    user = User.query.filter_by(refresh_token=incoming_refresh).first()
-    if not user:
-        return jsonify({"message": "Invalid refresh token"}), 401
-
-    # issue a fresh JWT
-    token = jwt.encode(
-        {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(minutes=30)},
-        app.config["SECRET_KEY"],
-        "HS256",
-    )
-    print(f"Refreshed token for user: {user.username}")
-
-    return jsonify({"token": token})
 
 
 # 7. Main execution block
