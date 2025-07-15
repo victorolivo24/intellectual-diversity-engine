@@ -316,7 +316,7 @@ def extract_keywords(text, max_keywords=7):
     # return most frequent words sorted from most to least frequent counts
     return [word for word, _ in keyword_counts.most_common(max_keywords)]
 
-# Category Texts for Cosine Similarity
+# Category Texts with buzzwords for Cosine Similarity
 CATEGORY_TEXTS = {
     "Technology": "apple google microsoft amazon facebook meta tesla spacex ai artificial intelligence software hardware crypto bitcoin blockchain phone laptop app",
     "Politics": "senate congress white house president biden trump republican democrat election vote law policy government senator governor",
@@ -345,16 +345,18 @@ def categorize_article(text):
         CATEGORY_NAMES[max_index] if cosine_sim[max_index] > 0.1 else "Other"
     )
 
-# --- Final Analysis Function ---
+# local analysis using trained ML model (out-of-the-loop-production-model)
 def get_local_analysis(text):
-    print("--- Getting analysis from local model... ---", flush=True)
-
+    print("Getting analysis from local model...", flush=True)
+    # call lazy loader function to load model into memory
     pipeline = get_sentiment_pipeline()
 
-    # Sentiment
+    # send first 512 tokens to BERT model (due to transformer architecture limit), extract result dictionary from list that pipeline returns
     result = pipeline(text[:512])[0]
     raw_score = result["score"]
+    # transform model output (0 to 1) to (-1 to 1)
     sentiment_score = (raw_score * 2) - 1
+    # clamp score to min and max bounds
     sentiment_score = max(-1.0, min(1.0, sentiment_score))
 
     # Category via cosine similarity
@@ -365,14 +367,14 @@ def get_local_analysis(text):
 
     return sentiment_score, keywords, category
 
-
+# API routes
 @app.route("/analyze", methods=["POST"])
 @token_required
 def analyze(current_user):
     url = request.get_json().get("url")
     if not url:
         return jsonify({"message": "URL is required"}), 400
-
+    # skip scraping for articles we have already analyzed
     existing = Article.query.filter_by(url=url).first()
     if existing:
         if existing not in current_user.articles:
@@ -392,22 +394,24 @@ def analyze(current_user):
         )
 
     try:
+        # scrape full raw HTML of page
         html = get_html(url)
         if not html:
             raise Exception("Failed to retrieve article content.")
-
+        # parse HTML into soup object
         soup = BeautifulSoup(html, "html.parser")
+        # extract title and text
         title = soup.title.string.strip() if soup.title else "Untitled"
         text = extract_article_text(soup, url=url)
-
+        # validate text
         if not text or len(text.strip()) < 100:
             return (
                 jsonify({"message": "⚠️ Article content was unavailable or too short."}),
                 200,
             )
-
+        # pass clean text to local analysis pipeline
         sentiment, keywords, category = get_local_analysis(text)
-
+        # save results as Article in database
         new_article = Article(
             url=url,
             title=title,
@@ -417,9 +421,10 @@ def analyze(current_user):
             category=category,
         )
         db.session.add(new_article)
+        # create link between current user and new article in reading_list association table
         current_user.articles.append(new_article)
         db.session.commit()
-
+        # send JSON back to browser extension
         return jsonify(
             {
                 "message": "Article analyzed",
@@ -434,15 +439,18 @@ def analyze(current_user):
         )
 
     except Exception as e:
+        # undo any partial databased changes from failed transaction, prevents data corruption
         db.session.rollback()
+        # detect common errors
         known_captcha_errors = [
             "CAPTCHA detected",
             "403 Client Error",
             "Forbidden",
             "Access denied"
         ]
-        
+
         message = str(e)
+        # return message based on error
         if any(phrase in message for phrase in known_captcha_errors):
             user_friendly_msg = (
                 "This article appears to be protected by a bot detection system (e.g. CAPTCHA). "
@@ -553,7 +561,7 @@ def login():
         {"token": token, "refresh_token": refresh_token, "username": user.username}
     )
 
-# --- DASHBOARD & TOPIC ROUTES ---
+
 @app.route("/dashboard", methods=["GET"])
 @token_required
 def dashboard(current_user):
