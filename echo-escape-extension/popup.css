@@ -168,13 +168,31 @@ input[type="password"]:focus {
     font-style: italic;
     opacity: 0.8;
 }
-.loop-spinner {
-    width: 32px;
-    height: 32px;
+/* Add to the bottom of popup.css */
+
+.spinner {
+    border: 4px solid rgba(33, 243, 5, 0.3);
+    /* Light grey border */
+    border-radius: 50%;
+    border-top: 4px solid #fff;
+    /* White for the spinning part */
+    width: 24px;
+    height: 24px;
+    animation: spin 1s linear infinite;
     margin: 10px auto;
-    animation: loop-rotate 1s linear infinite;
+    /* Center the spinner */
 }
 
+/* This is the spinning animation */
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
 .loop-path {
     stroke: #28a745;
 }

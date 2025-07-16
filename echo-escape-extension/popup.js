@@ -216,7 +216,7 @@ function handleAnalysis() {
             return;
         }
 
-        resultsContainer.innerHTML = 'Analyzing...';
+        resultsContainer.innerHTML = '<div style="text-align: center; padding: 10px;"><div class="spinner"></div><p>Analyzing...</p></div>';
         const pageHtml = response.page_html;
 
         // Get the stored token
