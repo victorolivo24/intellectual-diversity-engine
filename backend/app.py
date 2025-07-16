@@ -162,68 +162,6 @@ DEFAULT_TOPICS = [
 ]
 
 
-def get_html(url):
-    # First: simple fast request- disguise as chrome browser on windows computer to prevent being blocked
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/115.0.0.0 Safari/537.36"
-        )
-    }
-
-    try:
-        response = requests.get(url, headers=headers, timeout=15)
-        # check for error code
-        response.raise_for_status()
-        html = response.text
-
-        # Check for common CAPTCHA blocks (e.g. DataDome)
-        if "captcha-delivery.com" in html.lower() or "datadome" in html.lower():
-            raise Exception(
-                "CAPTCHA detected: This site is protected and cannot be scraped."
-            )
-        # transform raw HTML into soup object
-        soup = BeautifulSoup(html, "html.parser")
-        # more than 250 characters
-        if len(extract_article_text(soup, url=url)) > 250:
-            return html
-
-    except requests.RequestException:
-        pass  # Continue to Selenium fallback
-
-    # Fallback to Selenium
-    driver = None
-    try:
-        # configure Selenium browser, run without UI
-        options = Options()
-        options.add_argument("--headless")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        # launch instance of Chrome browser and navigate to url
-        driver = webdriver.Chrome(service=Service(), options=options)
-        driver.get(url)
-        # wait 10 seconds for common article container tag (in case JavaScript content loads after initial page load)
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located(
-                (By.CSS_SELECTOR, "article, [role='main'], .article-body, #main")
-            )
-        )
-
-        html = driver.page_source
-
-        # re-check CAPTCHA keywords before returning html
-        if "captcha-delivery.com" in html.lower() or "datadome" in html.lower():
-            raise Exception(
-                "CAPTCHA detected during Selenium fallback: Cannot analyze this page."
-            )
-
-        return html
-
-    finally:
-        if driver:
-            driver.quit()
-
 # find article from soup
 def extract_article_text(soup, url=None):
     # Remove irrelevant tags
@@ -371,38 +309,25 @@ def get_local_analysis(text):
 @app.route("/analyze", methods=["POST"])
 @token_required
 def analyze(current_user):
-    url = request.get_json().get("url")
-    if not url:
-        return jsonify({"message": "URL is required"}), 400
-    # skip scraping for articles we have already analyzed
-    existing = Article.query.filter_by(url=url).first()
-    if existing:
-        if existing not in current_user.articles:
-            current_user.articles.append(existing)
-            db.session.commit()
-        return jsonify(
-            {
-                "message": "Article added to history",
-                "data": {
-                    "title": existing.title,
-                    "sentiment": existing.sentiment_score,
-                    "keywords": existing.keywords,
-                    "category": existing.category,
-                    "article_text": existing.article_text,
-                },
-            }
-        )
-
+    # get html content from client
+    html_content = request.get_json().get('html_content')
+    if not html_content:
+        return jsonify({'message': 'HTML content not recieved'})
+ 
     try:
-        # scrape full raw HTML of page
-        html = get_html(url)
-        if not html:
-            raise Exception("Failed to retrieve article content.")
-        # parse HTML into soup object
-        soup = BeautifulSoup(html, "html.parser")
+     
+        soup = BeautifulSoup(html_content, "html.parser")
+        # try to extract original url from metadata
+        url_element = soup.find("link", rel="canonical")
+        url = url_element['href'] if url_element else "Unknown URL"
+        
+        # Check if this article is already in the database
+        existing = Article.query.filter_by(url=url).first()
+        if existing:
+            return jsonify({'message': 'Article added to history', 'data': {...}})
         # extract title and text
-        title = soup.title.string.strip() if soup.title else "Untitled"
-        text = extract_article_text(soup, url=url)
+        title = soup.find("title").get_text(strip=True) if soup.find("title") else "Untitled"
+        text = extract_article_text(soup)
         # validate text
         if not text or len(text.strip()) < 100:
             return (
