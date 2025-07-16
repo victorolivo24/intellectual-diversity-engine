@@ -305,37 +305,62 @@ def get_local_analysis(text):
 
     return sentiment_score, keywords, category
 
+
 # API routes
 @app.route("/analyze", methods=["POST"])
 @token_required
 def analyze(current_user):
     # get html content from client
-    html_content = request.get_json().get('html_content')
+    html_content = request.get_json().get("html_content")
     if not html_content:
-        return jsonify({'message': 'HTML content not recieved'})
- 
+        return jsonify({"message": "HTML content not received"}), 400
+
     try:
-     
         soup = BeautifulSoup(html_content, "html.parser")
+
         # try to extract original url from metadata
         url_element = soup.find("link", rel="canonical")
-        url = url_element['href'] if url_element else "Unknown URL"
-        
+        url = url_element["href"] if url_element else "Unknown URL"
+
         # Check if this article is already in the database
         existing = Article.query.filter_by(url=url).first()
         if existing:
-            return jsonify({'message': 'Article added to history', 'data': {...}})
+            # create link between current user and existing article in reading_list association table
+            if existing not in current_user.articles:
+                current_user.articles.append(existing)
+                db.session.commit()
+            # send cached JSON back to browser extension
+            return jsonify(
+                {
+                    "message": "Article added to history",
+                    "data": {
+                        "title": existing.title,
+                        "sentiment": existing.sentiment_score,
+                        "keywords": existing.keywords,
+                        "category": existing.category,
+                        "article_text": existing.article_text,
+                    },
+                }
+            )
+
         # extract title and text
-        title = soup.find("title").get_text(strip=True) if soup.find("title") else "Untitled"
+        title = (
+            soup.find("title").get_text(strip=True)
+            if soup.find("title")
+            else "Untitled"
+        )
         text = extract_article_text(soup)
+
         # validate text
         if not text or len(text.strip()) < 100:
             return (
                 jsonify({"message": "⚠️ Article content was unavailable or too short."}),
                 200,
             )
+
         # pass clean text to local analysis pipeline
         sentiment, keywords, category = get_local_analysis(text)
+
         # save results as Article in database
         new_article = Article(
             url=url,
@@ -346,9 +371,11 @@ def analyze(current_user):
             category=category,
         )
         db.session.add(new_article)
+
         # create link between current user and new article in reading_list association table
         current_user.articles.append(new_article)
         db.session.commit()
+
         # send JSON back to browser extension
         return jsonify(
             {
@@ -366,28 +393,20 @@ def analyze(current_user):
     except Exception as e:
         # undo any partial databased changes from failed transaction, prevents data corruption
         db.session.rollback()
-        # detect common errors
-        known_captcha_errors = [
-            "CAPTCHA detected",
-            "403 Client Error",
-            "Forbidden",
-            "Access denied"
-        ]
 
-        message = str(e)
         # return message based on error
-        if any(phrase in message for phrase in known_captcha_errors):
-            user_friendly_msg = (
-                "This article appears to be protected by a bot detection system (e.g. CAPTCHA). "
-                "We were unable to analyze it automatically."
-            )
-        else:
-            user_friendly_msg = (
-                "An unexpected error occurred while analyzing this article. "
-                "It may not be compatible with our system."
-            )
+        user_friendly_msg = (
+            "An unexpected error occurred while analyzing this article. "
+            "It may not be compatible with our system."
+        )
+        # Log the detailed error for debugging
+        print(f"--- EXCEPTION IN /analyze: {e} ---", flush=True)
+        import traceback
 
-        return jsonify({"message": user_friendly_msg}), 200
+        traceback.print_exc()
+
+        return jsonify({"message": user_friendly_msg}), 500
+
 
 # Single Sign-On (SSO) Routes
 @app.route('/generate_sso_ticket', methods=['POST'])
