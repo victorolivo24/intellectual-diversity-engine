@@ -66,6 +66,7 @@ custom_stopwords = {
     "like",
     "get",
     "going",
+    "advertisement"
 }
 stop_words.update(custom_stopwords)
 
