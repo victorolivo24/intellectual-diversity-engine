@@ -5,7 +5,8 @@
   "description": "Analyzes the sentiment and topics of the current news article to help you understand your media diet.",
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "scripting"
   ],
   "host_permissions": [
     "http://127.0.0.1:5000/*"
@@ -22,5 +23,8 @@
     "16": "icon16.png",
     "48": "icon48.png",
     "128": "icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
   }
 }
