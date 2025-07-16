@@ -199,142 +199,61 @@ function handleAuth(mode, container, e) {
             submitButton.disabled = false;
         });
 }
-
 function handleAnalysis() {
-    
     const analyzeButton = document.getElementById('analyze-button');
     const resultsContainer = document.getElementById('results-container');
 
-    resultsContainer.innerHTML = `
-    <div class="analyzing-message">
-      Analyzing, please wait...
-      <svg class="loop-spinner" viewBox="0 0 50 50">
-        <path
-          class="loop-path"
-          d="M25 5
-             a 20 20 0 1 1 -15 8"
-          fill="none"
-          stroke-width="4"
-          stroke-linecap="round"
-        ></path>
-        <circle class="escape-dot" cx="40" cy="25" r="3"></circle>
-      </svg>
-    </div>
-  `;
-  
-  
-  
-    analyzeButton.textContent = 'Analyzing...';
+    resultsContainer.innerHTML = 'Getting page content...';
+    analyzeButton.textContent = 'Working...';
     analyzeButton.disabled = true;
 
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        const currentTab = tabs[0];
-        if (!currentTab || !currentTab.url) {
-            resultsContainer.innerHTML = '<div class="error-message">Could not get URL of current tab.</div>';
+    // Send a message to the background script to get the page content
+    chrome.runtime.sendMessage({ action: "get_page_content" }, function (response) {
+        if (chrome.runtime.lastError || !response || !response.page_html) {
+            resultsContainer.innerHTML = `<div class="error-message">Could not get content from this page.</div>`;
+            analyzeButton.textContent = 'Analyze Page';
+            analyzeButton.disabled = false;
             return;
         }
 
-        chrome.storage.sync.get(['token'], function (tokenResult) {
-            if (!tokenResult.token) {
+        resultsContainer.innerHTML = 'Analyzing...';
+        const pageHtml = response.page_html;
+
+        // Get the stored token
+        chrome.storage.sync.get(['token'], function (result) {
+            if (!result.token) {
                 resultsContainer.innerHTML = '<div class="error-message">Error: Not logged in.</div>';
                 return;
             }
 
+            //  Send the FULL HTML to the backend for analysis
             fetch(`${API_URL}/analyze`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-access-token': tokenResult.token
+                    'x-access-token': result.token
                 },
-                body: JSON.stringify({ url: currentTab.url })
+                body: JSON.stringify({ html_content: pageHtml }) // Send HTML instead of URL
             })
-                .then(async response => {
-                    const contentType = response.headers.get('content-type') || '';
-
-                    if (!response.ok) {
-                        if (contentType.includes('application/json')) {
-                            const err = await response.json();
-
-                            // 👇 Retry token logic
-                            if (err.message && err.message.includes("Token is invalid")) {
-                                return new Promise((resolve, reject) => {
-                                    chrome.storage.sync.get(['refreshToken'], function (result) {
-                                        if (!result.refreshToken) {
-                                            resultsContainer.innerHTML = `
-                                            <div class="error-message">
-                                                ⚠️ Your session expired, please log in again.
-                                            </div>
-                                        `;
-                                            chrome.storage.sync.remove(['token', 'username']);
-                                            return reject(new Error("No refresh token"));
-                                        }
-
-                                        fetch(`${API_URL}/refresh_token`, {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ refresh_token: result.refreshToken })
-                                        })
-                                            .then(res => {
-                                                if (!res.ok) throw new Error("Refresh failed");
-                                                return res.json();
-                                            })
-                                            .then(newData => {
-                                                chrome.storage.sync.set({ token: newData.token }, () => {
-                                                    // Retry original request
-                                                    handleAnalysis();
-                                                    resolve(); // short-circuit this chain
-                                                });
-                                            })
-                                            .catch(error => {
-                                                let message = "⚠️ There was a network or server error reaching the analysis system.";
-                                                if (error.message.includes("CAPTCHA")) {
-                                                    message = "⚠️ This article is protected by a bot detection system (CAPTCHA) and cannot be analyzed.";
-                                                }
-                                                resultsContainer.innerHTML = `
-                                                    <div class="error-message">${message}</div>
-                                                `;
-                                            });
-                                            
-                                    });
-                                });
-                            }
-
-                            throw new Error(err.message || 'Analysis failed.');
-                        } else {
-                            throw new Error("Non-JSON response from server");
-                        }
-                    }
-
-                    return contentType.includes('application/json')
-                        ? response.json()
-                        : Promise.reject("Expected JSON, got something else");
+                .then(res => {
+                    if (!res.ok) return res.json().then(err => { throw new Error(err.message) });
+                    return res.json();
                 })
-            
-            
-            
                 .then(data => {
                     if (data.data) {
-                        renderResults(resultsContainer, data.data, null);
+                        renderResults(resultsContainer, data.data);
                     } else {
-                        resultsContainer.innerHTML = `
-                            <div class="error-message">
-                                ⚠️ ${data.message || "Could not analyze this article."}
-                            </div>
-                        `;
+                        throw new Error(data.message || 'Analysis failed.');
                     }
                 })
-                
                 .catch(error => {
-                    resultsContainer.innerHTML = `
-                        <div class="error-message">
-                            ⚠️ There was a network or server error reaching the analysis system. This is not related to the article itself.
-                        </div>
-                    `;
+                    resultsContainer.innerHTML = `<div class="error-message">${error.message}</div>`;
                 })
-                
                 .finally(() => {
-                    analyzeButton.textContent = 'Analyze Page';
-                    analyzeButton.disabled = false;
+                    if (document.contains(analyzeButton)) {
+                        analyzeButton.textContent = 'Analyze Page';
+                        analyzeButton.disabled = false;
+                    }
                 });
         });
     });
