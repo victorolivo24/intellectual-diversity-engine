@@ -5,12 +5,14 @@ import DashboardComponent from './DashboardComponent';
 import AuthComponent from './AuthComponent';
 import AnalysisComponent from './AnalysisComponent';
 import styles from "./styles.js";
+import ResetPasswordComponent from './ResetPasswordComponent';
 
 export default function App() {
   const [auth, setAuth] = useState(null);
   const [view, setView] = useState('dashboard');
   const [dashboardKey, setDashboardKey] = useState(0);
-
+  const isResetRoute = window.location.pathname.startsWith('/reset-password');
+  
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const ssoTicket = params.get('sso_ticket');
@@ -48,6 +50,13 @@ export default function App() {
   const handleAnalysisComplete = () => {
     setDashboardKey(k => k + 1);
   };
+  if (isResetRoute) {
+    return (
+      <div style={styles.container}>
+        <ResetPasswordComponent />
+      </div>
+    );
+  }
 
   if (!auth) {
     return (
@@ -117,7 +126,7 @@ export default function App() {
         {/* content */}
         {view === 'dashboard' ? (
           
-          <DashboardComponent auth={auth} onRefresh={handleAnalysisComplete} setAuth={setAuth} />
+          <DashboardComponent auth={auth} onRefresh={handleAnalysisComplete} setAuth={setAuth} key={dashboardKey} />
         ) : (
           <AnalysisComponent
             auth={auth}

@@ -31,11 +31,20 @@ export default function AuthComponent({ onAuth }) {
         {error && <div style={styles.errorText}>{error}</div>}
         <button type="submit" style={styles.button}>{mode==='login' ? 'Login' : 'Sign Up'}</button>
       </form>
-      <p style={{ marginTop:'10px', textAlign: 'center' }}>
-        {mode==='login' ?
-          <>Don't have an account? <span style={{ color:'#1877f2', cursor:'pointer' }} onClick={()=>{setMode('register');setError('');}}>Register</span></>
-        :
-          <>Have an account? <span style={{ color:'#1877f2', cursor:'pointer' }} onClick={()=>{setMode('login');setError('');}}>Login</span></>
+      <p style={{ marginTop: '10px', textAlign: 'center' }}>
+        {mode === 'login' ?
+          <>
+            Don't have an account?
+            <span style={{ color: '#1877f2', cursor: 'pointer' }} onClick={() => { setMode('register'); setError(''); }}> Register</span>
+            <span style={{ margin: '0 10px' }}>|</span>
+            {/* THIS IS THE NEW LINK */}
+            <a href="/reset-password" style={{ color: '#1877f2', cursor: 'pointer' }}>Forgot Password?</a>
+          </>
+          :
+          <>
+            Have an account?
+            <span style={{ color: '#1877f2', cursor: 'pointer' }} onClick={() => { setMode('login'); setError(''); }}> Login</span>
+          </>
         }
       </p>
     </div>

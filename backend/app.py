@@ -85,7 +85,13 @@ class User(db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     # relationship for many-many setup, lazy loading to load articles only when user.articles used- keeps fast and efficient
     articles = db.relationship(
-        "Article", secondary=reading_list, backref=db.backref("readers", lazy=True)
+        "Article",
+        secondary=reading_list,
+        backref=db.backref("readers", lazy=True),
+        cascade="all, delete",
+    )
+    sso_tickets = db.relationship(
+        "SsoTicket", backref="user", lazy=True, cascade="all, delete-orphan"
     )
     refresh_token = db.Column(db.String(128), unique=True, nullable=True)
 
@@ -118,6 +124,15 @@ class SsoTicket(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False)
     is_used = db.Column(db.Boolean, default=False, nullable=False)
+
+
+class PasswordResetToken(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    token = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    is_used = db.Column(db.Boolean, default=False, nullable=False)
+
 
 # custom topics created by user
 class UserTopic(db.Model):
@@ -351,7 +366,7 @@ def analyze(current_user):
             else "Untitled"
         )
         text = extract_article_text(soup)
-
+        print(text)
         # validate text
         if not text or len(text.strip()) < 100:
             return (
@@ -473,6 +488,18 @@ def redeem_sso_ticket():
 
 # Authentication Routes
 
+
+@app.route("/me", methods=["GET"])
+@token_required
+def get_current_user(current_user):
+    """A simple protected route to check a token's validity."""
+    if not current_user:
+        # This case is unlikely due to the decorator, but good for safety
+        return jsonify({"message": "Invalid token."}), 401
+
+    return jsonify({"username": current_user.username}), 200
+
+
 @app.route("/register", methods=["POST"])
 def register():
     data = request.get_json()
@@ -555,6 +582,84 @@ def refresh_token():
     print(f"Refreshed token for user: {user.username}")
 
     return jsonify({"token": token})
+
+
+@app.route("/request-password-reset", methods=["POST"])
+def request_password_reset():
+    """
+    Handles the initial password reset request from a user.
+    """
+    data = request.get_json()
+    username = data.get("username")
+    user = User.query.filter_by(username=username).first()
+
+    if user:
+        # Generate a secure, URL-safe token
+        token = secrets.token_urlsafe(32)
+        # Set an expiration time (e.g., 1 hour from now)
+        expiration = dt.datetime.utcnow() + dt.timedelta(hours=1)
+
+        # Create and save the reset token record
+        reset_token = PasswordResetToken(
+            user_id=user.id, token=token, expires_at=expiration
+        )
+        db.session.add(reset_token)
+        db.session.commit()
+
+        # For development, we print the link instead of emailing it.
+        # In production, you would use a service like SendGrid or Mailgun here.
+        reset_link = f"http://localhost:3000/reset-password/{token}"
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print(f"--- PASSWORD RESET LINK (for user: {user.username}): {reset_link} ---")
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+
+    # Always return a generic success message to prevent user enumeration.
+    # We don't want to confirm whether an email/username exists in our system.
+    return (
+        jsonify(
+            {
+                "message": "If an account with that username exists, a password reset link has been sent."
+            }
+        ),
+        200,
+    )
+
+
+@app.route("/perform-password-reset", methods=["POST"])
+def perform_password_reset():
+    """
+    Handles the final password reset using a valid token.
+    """
+    data = request.get_json()
+    token = data.get("token")
+    new_password = data.get("new_password")
+
+    if not token or not new_password:
+        return jsonify({"message": "Token and new password are required."}), 400
+
+    # Find the token in the database
+    reset_token = PasswordResetToken.query.filter_by(token=token).first()
+
+    # --- Security Checks ---
+    if (
+        not reset_token
+        or reset_token.is_used
+        or reset_token.expires_at < dt.datetime.utcnow()
+    ):
+        return jsonify({"message": "This reset link is invalid or has expired."}), 401
+
+    # Find the associated user
+    user = db.session.get(User, reset_token.user_id)
+    if not user:
+        return jsonify({"message": "User not found."}), 404
+
+    # Update the password and mark the token as used
+    user.set_password(new_password)
+    reset_token.is_used = True
+    db.session.commit()
+
+    return jsonify({"message": "Password has been reset successfully."}), 200
+
 
 # Dashboard Data Endpoints
 @app.route("/dashboard", methods=["GET"])

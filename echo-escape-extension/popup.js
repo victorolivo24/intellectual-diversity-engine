@@ -10,16 +10,39 @@ document.addEventListener('DOMContentLoaded', function () {
     checkAuthState(rootContainer);
 });
 
+
 function checkAuthState(container) {
-    chrome.storage.sync.get(['token', 'username'], function (result) {
-        if (result.token && result.username) {
-            renderAnalysisView(container, result.username);
-        } else {
+    chrome.storage.sync.get(['token'], function (result) {
+        const token = result.token;
+        if (!token) {
+            // If no token exists, show login form immediately
             renderLoginForm(container);
+            return;
         }
+
+        // If a token exists, VERIFY it with the backend
+        fetch(`${API_URL}/me`, {
+            headers: { 'x-access-token': token }
+        })
+            .then(response => {
+                if (!response.ok) {
+                    // If the token is invalid (e.g., user deleted), throw an error
+                    throw new Error('Invalid session');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Success! The token is valid.
+                renderAnalysisView(container, data.username);
+            })
+            .catch(error => {
+                // The token was invalid. Log the user out of the extension.
+                console.error("Token validation failed:", error.message);
+                chrome.storage.sync.remove(['token', 'username']);
+                renderLoginForm(container);
+            });
     });
 }
-
 // --- RENDER FUNCTIONS ---
 
 function renderLoginForm(container) {
@@ -37,15 +60,30 @@ function renderLoginForm(container) {
             <button type="submit" class="button">Login</button>
             <div id="error-message" class="error-message"></div>
         </form>
-        <p class="auth-switch">Don't have an account? <a href="#" id="show-register">Register</a></p>
+        <p class="auth-switch">
+            Don't have an account? <a href="#" id="show-register">Register</a>
+        </p>
+        <p class="auth-switch" style="margin-top: 5px;">
+            <a href="#" id="forgot-password-link">Forgot Password?</a>
+        </p>
     `;
 
+    // Add event listener for the login form
     document.getElementById('auth-form').addEventListener('submit', (e) => handleAuth('login', container, e));
+
+    // Add event listener for the "Register" link
     document.getElementById('show-register').addEventListener('click', (e) => {
         e.preventDefault();
         renderRegisterForm(container);
     });
+    // This handles the "Forgot Password?" link
+    document.getElementById('forgot-password-link').addEventListener('click', (e) => {
+        e.preventDefault();
+        // Open the main website's reset page in a new tab
+        chrome.tabs.create({ url: `${DASHBOARD_URL}/reset-password` });
+    });
 }
+
 
 function renderRegisterForm(container) {
     container.innerHTML = `
