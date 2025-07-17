@@ -262,6 +262,74 @@ def extract_article_text(soup, url=None):
     # can't find container for text body, return all text
     return soup.get_text(separator="\n", strip=True)
 
+import re
+
+
+def clean_article_text(text):
+    # Normalize line endings and whitespace
+    text = re.sub(r"\r\n|\r", "\n", text)  # normalize newlines
+    text = re.sub(r"\s+", " ", text)  # collapse excessive spaces
+    text = re.sub(r"\n{2,}", "\n\n", text)  # collapse >2 newlines to 2
+
+    # Generic phrases that usually indicate non-article content
+    cutoff_phrases = [
+        "Related Articles",
+        "Related Stories",
+        "Read More",
+        "Recommended for You",
+        "More from",
+        "You might also like",
+        "Top Stories",
+        "Sponsored Content",
+        "Advertisement",
+        "Leave a comment",
+        "Share this article",
+        "See All Newsletters",
+        "All rights reserved",
+        "Click to copy link",
+        "Most Popular",
+        "Join the conversation",
+        "Subscribe to our newsletter",
+        "TRENDING NOW",
+        "Presented by",
+        "Sponsored Links",
+        "Terms of Service",
+        "Privacy Policy",
+        "Give feedback",
+    ]
+
+    # Cut off the article at the earliest occurrence of any boilerplate phrase
+    for phrase in cutoff_phrases:
+        index = text.lower().find(phrase.lower())
+        if index != -1 and index > 200:  # avoid false positives at the top
+            text = text[:index]
+            break
+
+    # Remove common inline ad or UI junk
+    removal_patterns = [
+        r"^\s*Advertisement\s*$",
+        r"^\s*Sponsored\s*$",
+        r"^\s*Undo\s*$",
+        r"^\s*Newsletter.*$",
+        r"^\s*Follow us on.*$",
+        r"^\s*Read full story at.*$",
+        r"^\s*More coverage:.*$",
+        r"^\s*Watch now.*$",
+        r"^\s*Tap here.*$",
+        r"^\s*Trending.*$",
+    ]
+
+    for pattern in removal_patterns:
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE | re.MULTILINE)
+
+    # Remove repeated junk like "AP News" or "CNN" showing up multiple times
+    text = re.sub(r"\b(?:AP News|CNN|Fox News|Reuters|NBC News)\b", "", text)
+
+    # Final strip and cleanup
+    text = text.strip()
+    return text
+
+
 # load large AI model into memory efficiently (lazy loading)
 def get_sentiment_pipeline():
     global sentiment_pipeline
@@ -389,6 +457,7 @@ def analyze(current_user):
             else "Untitled"
         )
         text = extract_article_text(soup)
+        text = clean_article_text(text)
         print(text)
         # validate text
         if not text or len(text.strip()) < 100:
