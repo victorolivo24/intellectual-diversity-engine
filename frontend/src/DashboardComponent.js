@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import styles from "./styles.js";
 
-export default function DashboardComponent({ auth, onRefresh, key }) {
+export default function DashboardComponent({ auth, onRefresh, setAuth, key }) {
   const [state, setState] = useState({
     loading: true,
     error: null,
@@ -78,6 +78,32 @@ export default function DashboardComponent({ auth, onRefresh, key }) {
     }
   };
 
+  const handleDeleteAccount = async () => {
+    // Confirm before deleting account
+    if (!window.confirm("Are you sure you want to delete your account? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      const res = await fetch('http://127.0.0.1:5000/account/delete', {
+        method: 'DELETE',
+        headers: { 'x-access-token': auth.token }
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to delete account.");
+      }
+
+      alert("Your account has been successfully deleted.");
+      // Log the user out completely by clearing session and auth state
+      sessionStorage.clear();
+      setAuth(null); 
+
+    } catch (err) {
+      alert(`Error: ${err.message}`);
+    }
+  };
   const wordCloudData = useMemo(() => {
     if (!state.articles || state.articles.length === 0) return [];
     const docFrequency = {};
@@ -95,6 +121,12 @@ export default function DashboardComponent({ auth, onRefresh, key }) {
 
   return (
     <div>
+      <div style={{ ...styles.header, justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <p style={{ ...styles.welcomeMessage, margin: 0 }}>Welcome, {auth.username}!</p>
+        <button onClick={handleDeleteAccount} style={{ ...styles.logoutButton, color: '#dc3545' }}>
+          Delete Account
+        </button>
+      </div>
       <h2 style={{ ...styles.sectionTitle, textAlign: 'center', marginBottom: '30px', fontSize: '24px' }}>
         Your Information Diet
       </h2>

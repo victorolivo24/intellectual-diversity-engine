@@ -116,11 +116,8 @@ export default function App() {
 
         {/* content */}
         {view === 'dashboard' ? (
-          <DashboardComponent
-            auth={auth}
-            key={dashboardKey}
-            onRefresh={handleAnalysisComplete}
-          />
+          
+          <DashboardComponent auth={auth} onRefresh={handleAnalysisComplete} setAuth={setAuth} />
         ) : (
           <AnalysisComponent
             auth={auth}

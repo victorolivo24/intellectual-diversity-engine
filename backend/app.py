@@ -508,6 +508,32 @@ def login():
     )
 
 
+@app.route("/account/delete", methods=["DELETE"])
+@token_required
+def delete_account(current_user):
+    """Deletes the current user and all of their associated data."""
+    if not current_user:
+        return jsonify({"message": "User not found."}), 404
+
+    try:
+        # Before deleting the user, SQLAlchemy with our setup will handle
+        # deleting their entries from the reading_list. We will also
+        # manually delete their custom topics.
+        UserTopic.query.filter_by(user_id=current_user.id).delete()
+
+        # Now, delete the user itself
+        db.session.delete(current_user)
+
+        # Commit the changes to the database
+        db.session.commit()
+
+        return jsonify({"message": "Account deleted successfully."}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"--- ERROR during account deletion: {e} ---", flush=True)
+        return jsonify({"message": "An error occurred during account deletion."}), 500
+
+
 @app.route("/refresh_token", methods=["POST"])
 def refresh_token():
     data = request.get_json()
