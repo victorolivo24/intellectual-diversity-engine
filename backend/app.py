@@ -202,10 +202,14 @@ def extract_article_text(soup, url=None):
         "#main",
         "#main-content",
         ".main-content",
+        ".article-content",
         ".article-body",
         ".post-content",
+        ".entry-content",
         ".content__article-body",
-        ".StandardArticleBody_body",    
+        ".story-body",
+        ".StandardArticleBody_body",
+        ".content-body",
     ]
 
     for selector in selectors:
@@ -214,6 +218,25 @@ def extract_article_text(soup, url=None):
             text = element.get_text(separator="\n", strip=True)
             if len(text) > 250:
                 return text
+    # helper function to score divs to find most likely article text
+    def score_candidate(tag):
+        text = tag.get_text(separator="\n", strip=True)
+        p_tags = tag.find_all("p")
+        a_tags = tag.find_all("a")
+        img_tags = tag.find_all("img")
+        score = len(text) + len(p_tags) * 20 - len(a_tags) * 10 - len(img_tags) * 10
+        return score, text
+
+    best_score = 0
+    best_text = ""
+    for container in soup.find_all(["div", "section"]):
+        score, text = score_candidate(container)
+        if score > best_score and len(text) > 250:
+            best_score = score
+            best_text = text
+
+    if best_text:
+        return best_text
 
     # plan b if text is not in one of primary selectors, look for div with largest block of text
     divs = soup.find_all("div")
@@ -225,12 +248,12 @@ def extract_article_text(soup, url=None):
             if len(text) > max_len:
                 max_len = len(text)
                 longest_text = text
- 
+
     # return if larger than 250 characters
     if len(longest_text) > 250:
         return longest_text
 
-    # 
+    #
     paragraphs = soup.find_all("p")
     combined_paragraphs = "\n".join([p.get_text(strip=True) for p in paragraphs])
     if len(combined_paragraphs) > 250:
