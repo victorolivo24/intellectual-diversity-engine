@@ -31,7 +31,20 @@ export default function AuthComponent({ onAuth }) {
         {error && <div style={styles.errorText}>{error}</div>}
         <button type="submit" style={styles.button}>{mode==='login' ? 'Login' : 'Sign Up'}</button>
       </form>
-      <p style={{ marginTop: '10px', textAlign: 'center' }}>
+      <div style={{ textAlign: 'center', margin: '15px 0', color: '#666', fontWeight: 'bold' }}>OR</div>
+      <a
+        href="http://127.0.0.1:5000/login/google"
+        style={{
+          ...styles.button,
+          textDecoration: 'none',
+          backgroundColor: '#4285F4', // Google's blue color
+          textAlign: 'center',
+          display: 'block' // Make the anchor tag behave like a button
+        }}
+      >
+        Sign in with Google
+      </a>
+      <p style={{ marginTop: '15px', textAlign: 'center' }}>
         {mode === 'login' ?
           <>
             Don't have an account?
