@@ -81,7 +81,7 @@ reading_list = db.Table(
 # user model
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     # relationship for many-many setup, lazy loading to load articles only when user.articles used- keeps fast and efficient
     articles = db.relationship(
@@ -569,13 +569,13 @@ def redeem_sso_ticket():
     user.refresh_token = refresh_token
     db.session.commit()
     print(
-        f"[DEBUG] user {user.username} redeemed SSO ticket and got refresh token: {refresh_token}"
+        f"[DEBUG] user {user.email} redeemed SSO ticket and got refresh token: {refresh_token}"
     )
 
     return jsonify({
         "token": token,
         "refresh_token": refresh_token,
-        "username": user.username
+        "email": user.email
     })
 
 # Authentication Routes
@@ -589,42 +589,52 @@ def get_current_user(current_user):
         # This case is unlikely due to the decorator, but good for safety
         return jsonify({"message": "Invalid token."}), 401
 
-    return jsonify({"username": current_user.username}), 200
+    return jsonify({"email": current_user.email}), 200
+
+EMAIL_REGEX = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 
 
 @app.route("/register", methods=["POST"])
 def register():
     data = request.get_json()
-    u, p = data.get("username"), data.get("password")
-    if not u or not p:
-        return jsonify({"message": "Username and password required"}), 400
-    if User.query.filter_by(username=u).first():
-        return jsonify({"message": "Username already exists"}), 400
-    user = User(username=u)
-    user.set_password(p)
+    email = data.get("email")
+    password = data.get("password")
+
+ 
+    if not email or not password:
+        return jsonify({"message": "Email and password are required"}), 400
+
+    # Check if email format is valid
+    if not re.match(EMAIL_REGEX, email):
+        return jsonify({"message": "Invalid email format"}), 400
+
+    if User.query.filter_by(email=email).first():
+        return jsonify({"message": "An account with this email already exists"}), 409
+
+    user = User(email=email)
+    user.set_password(password)
     db.session.add(user)
     db.session.commit()
-    return jsonify({"message": "User registered successfully"})
+    return jsonify({"message": "User registered successfully"}), 201
 
 
 @app.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
-    u, p = data.get("username"), data.get("password")
-    user = User.query.filter_by(username=u).first()
-    if not user or not user.check_password(p):
+    email = data.get("email")
+    password = data.get("password")
+    user = User.query.filter_by(email=email).first()
+
+    if not user or not user.check_password(password):
         return jsonify({"message": "Invalid credentials"}), 401
+
     token = jwt.encode(
         {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
         app.config["SECRET_KEY"],
         "HS256",
     )
-    refresh_token = secrets.token_urlsafe(64)
-    user.refresh_token = refresh_token
-    db.session.commit()
-    return jsonify(
-        {"token": token, "refresh_token": refresh_token, "username": user.username}
-    )
+    # We will return the email to be stored on the frontend
+    return jsonify({"token": token, "email": user.email})
 
 
 @app.route("/account/delete", methods=["DELETE"])
@@ -671,7 +681,7 @@ def refresh_token():
         app.config["SECRET_KEY"],
         "HS256",
     )
-    print(f"Refreshed token for user: {user.username}")
+    print(f"Refreshed token for user: {user.email}")
 
     return jsonify({"token": token})
 
@@ -682,8 +692,8 @@ def request_password_reset():
     Handles the initial password reset request from a user.
     """
     data = request.get_json()
-    username = data.get("username")
-    user = User.query.filter_by(username=username).first()
+    email = data.get("email")
+    user = User.query.filter_by(email=email).first()
 
     if user:
         # Generate a secure, URL-safe token
@@ -702,15 +712,15 @@ def request_password_reset():
         # In production, you would use a service like SendGrid or Mailgun here.
         reset_link = f"http://localhost:3000/reset-password/{token}"
         print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        print(f"--- PASSWORD RESET LINK (for user: {user.username}): {reset_link} ---")
+        print(f"--- PASSWORD RESET LINK (for user: {user.email}): {reset_link} ---")
         print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
     # Always return a generic success message to prevent user enumeration.
-    # We don't want to confirm whether an email/username exists in our system.
+    # We don't want to confirm whether an email/email exists in our system.
     return (
         jsonify(
             {
-                "message": "If an account with that username exists, a password reset link has been sent."
+                "message": "If an account with that email exists, a password reset link has been sent."
             }
         ),
         200,
