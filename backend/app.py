@@ -6,7 +6,7 @@ import requests
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, redirect, session
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -30,7 +30,7 @@ from transformers import pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import threading
-
+from requests.ouathlib import Oauth2Session
 # initialize Flask app with database
 load_dotenv()
 app = Flask(__name__)
@@ -761,6 +761,79 @@ def perform_password_reset():
     db.session.commit()
 
     return jsonify({"message": "Password has been reset successfully."}), 200
+
+
+@app.route("/login/google")
+def google_login():
+    """
+    Redirects the user to Google's authentication page.
+    """
+    # Define the "scopes" - what information we are asking for
+    scope = [
+        "https://www.googleapis.com/auth/userinfo.email",
+        "https://www.googleapis.com/auth/userinfo.profile",
+    ]
+    google = OAuth2Session(
+        app.config["GOOGLE_CLIENT_ID"],
+        scope=scope,
+        redirect_uri=app.config["GOOGLE_REDIRECT_URI"],
+    )
+    # Generate the authorization URL and a state token for security
+    authorization_url, state = google.authorization_url(
+        "https://accounts.google.com/o/oauth2/v2/auth",
+        access_type="offline",
+        prompt="select_account",
+    )
+    # Store the state in the session to verify it later
+    session["oauth_state"] = state
+    # Send the user to Google to sign in
+    return redirect(authorization_url)
+
+
+@app.route("/auth/google/callback")
+def google_callback():
+    """
+    Handles the callback from Google after a user authenticates.
+    """
+    google = OAuth2Session(
+        app.config["GOOGLE_CLIENT_ID"],
+        state=session.get("oauth_state"),
+        redirect_uri=app.config["GOOGLE_REDIRECT_URI"],
+    )
+    # Exchange the authorization code for an access token
+    token = google.fetch_token(
+        "https://www.googleapis.com/oauth2/v4/token",
+        client_secret=app.config["GOOGLE_CLIENT_SECRET"],
+        authorization_response=request.url,
+    )
+    # Use the access token to get the user's profile info
+    user_info = google.get("https://www.googleapis.com/oauth2/v1/userinfo").json()
+
+    if not user_info.get("verified_email"):
+        return "User email not available or not verified by Google.", 400
+
+    user_email = user_info["email"]
+
+    # Find or create the user in our database
+    user = User.query.filter_by(email=user_email).first()
+    if not user:
+        # Create a new user with a random password, as they will only use Google to log in
+        new_password = secrets.token_urlsafe(16)
+        user = User(email=user_email)
+        user.set_password(new_password)
+        db.session.add(user)
+        db.session.commit()
+
+    # Issue our application's own JWT token for the session
+    app_token = jwt.encode(
+        {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
+        app.config["SECRET_KEY"],
+        "HS256",
+    )
+
+    # Redirect the user back to the main dashboard with the token
+    # This is similar to our SSO flow
+    return redirect(f"http://localhost:3000?token={app_token}")
 
 
 # Dashboard Data Endpoints
