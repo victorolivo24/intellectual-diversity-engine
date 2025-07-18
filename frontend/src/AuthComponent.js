@@ -26,7 +26,7 @@ export default function AuthComponent({ onAuth }) {
     <div style={styles.card}>
       <h2>{mode==='login' ? 'Login' : 'Register'}</h2>
       <form onSubmit={submit} style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-        <input placeholder="email" value={email} onChange={e=>setemail(e.target.value)} required style={styles.input}/>
+        <input placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required style={styles.input}/>
         <input type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} required style={styles.input}/>
         {error && <div style={styles.errorText}>{error}</div>}
         <button type="submit" style={styles.button}>{mode==='login' ? 'Login' : 'Sign Up'}</button>

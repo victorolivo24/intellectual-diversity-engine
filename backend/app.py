@@ -1,5 +1,6 @@
 import datetime as dt
 import json, os, re, time
+import os
 from collections import Counter, defaultdict
 from functools import wraps
 import requests
@@ -36,9 +37,16 @@ import threading
 load_dotenv()
 app = Flask(__name__)
 CORS(app)
+# just for local testing, remover for production
+os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["GOOGLE_CLIENT_ID"] = os.getenv("GOOGLE_CLIENT_ID")
+app.config["GOOGLE_CLIENT_SECRET"] = os.getenv("GOOGLE_CLIENT_SECRET")
+app.config["GOOGLE_REDIRECT_URI"] = "http://127.0.0.1:5000/auth/google/callback"
+
 db = SQLAlchemy(app)
 # specify path to nltk data
 nltk.data.path.append("C:/Users/victo/AppData/Roaming/nltk_data")

@@ -1,24 +1,40 @@
-// App.js
-
 import React, { useState, useEffect } from 'react';
 import DashboardComponent from './DashboardComponent';
 import AuthComponent from './AuthComponent';
 import AnalysisComponent from './AnalysisComponent';
-import styles from "./styles.js";
 import ResetPasswordComponent from './ResetPasswordComponent';
+import styles from "./styles.js";
 
 export default function App() {
   const [auth, setAuth] = useState(null);
   const [view, setView] = useState('dashboard');
   const [dashboardKey, setDashboardKey] = useState(0);
+
   const isResetRoute = window.location.pathname.startsWith('/reset-password');
+
   
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
     const ssoTicket = params.get('sso_ticket');
 
-    if (ssoTicket) {
-      // one-time ticket from extension
+    if (token) {
+      // Case 1: A direct token from Google OAuth login
+      // We need to fetch the email associated with this new token
+      fetch('http://127.0.0.1:5000/me', { headers: { 'x-access-token': token } })
+        .then(res => res.json())
+        .then(data => {
+          if (data.email) {
+            sessionStorage.setItem('token', token);
+            sessionStorage.setItem('email', data.email);
+            setAuth({ token, email: data.email });
+          }
+        });
+      // Clean the URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+    } else if (ssoTicket) {
+      // Case 2: An SSO ticket from the browser extension
       fetch('http://127.0.0.1:5000/redeem_sso_ticket', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -28,21 +44,19 @@ export default function App() {
         .then(data => {
           if (data.token) {
             sessionStorage.setItem('token', data.token);
-            sessionStorage.setItem('username', data.username);
-            setAuth({ token: data.token, username: data.username });
+            sessionStorage.setItem('email', data.email);
+            setAuth({ token: data.token, email: data.email });
           }
-          window.history.replaceState({}, document.title, window.location.pathname);
-        })
-        .catch(err => {
-          console.error(err);
-          window.history.replaceState({}, document.title, window.location.pathname);
         });
+      // Clean the URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+
     } else {
-      // fallback: use existing session
+      // Case 3: A normal page load, check for an existing session
       const storedToken = sessionStorage.getItem('token');
-      const storedUsername = sessionStorage.getItem('username');
-      if (storedToken && storedUsername) {
-        setAuth({ token: storedToken, username: storedUsername });
+      const storedEmail = sessionStorage.getItem('email');
+      if (storedToken && storedEmail) {
+        setAuth({ token: storedToken, email: storedEmail });
       }
     }
   }, []);
@@ -50,12 +64,9 @@ export default function App() {
   const handleAnalysisComplete = () => {
     setDashboardKey(k => k + 1);
   };
+
   if (isResetRoute) {
-    return (
-      <div style={styles.container}>
-        <ResetPasswordComponent />
-      </div>
-    );
+    return <div style={styles.container}><ResetPasswordComponent /></div>;
   }
 
   if (!auth) {
@@ -63,7 +74,7 @@ export default function App() {
       <div style={styles.container}>
         <AuthComponent onAuth={info => {
           sessionStorage.setItem('token', info.token);
-          sessionStorage.setItem('username', info.username);
+          sessionStorage.setItem('email', info.email);
           setAuth(info);
         }} />
       </div>
@@ -73,7 +84,7 @@ export default function App() {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        {/* professional header with logo */}
+        {/* logo and header */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -122,17 +133,10 @@ export default function App() {
             Logout
           </button>
         </div>
-
-        {/* content */}
         {view === 'dashboard' ? (
-          
           <DashboardComponent auth={auth} onRefresh={handleAnalysisComplete} setAuth={setAuth} key={dashboardKey} />
         ) : (
-          <AnalysisComponent
-            auth={auth}
-            onBack={() => setView('dashboard')}
-            onAnalysisComplete={handleAnalysisComplete}
-          />
+          <AnalysisComponent auth={auth} onBack={() => setView('dashboard')} onAnalysisComplete={handleAnalysisComplete} />
         )}
       </div>
     </div>

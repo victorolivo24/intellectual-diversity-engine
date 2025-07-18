@@ -122,7 +122,7 @@ export default function DashboardComponent({ auth, onRefresh, setAuth, key }) {
   return (
     <div>
       <div style={{ ...styles.header, justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <p style={{ ...styles.welcomeMessage, margin: 0 }}>Welcome, {auth.username}!</p>
+        <p style={{ ...styles.welcomeMessage, margin: 0 }}>Welcome, {auth.email}!</p>
         <button onClick={handleDeleteAccount} style={{ ...styles.logoutButton, color: '#dc3545' }}>
           Delete Account
         </button>
