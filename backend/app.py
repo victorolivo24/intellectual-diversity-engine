@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, request, redirect, session
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+from requests_oauthlib import OAuth2Session
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 from selenium import webdriver
@@ -30,7 +31,7 @@ from transformers import pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import threading
-from requests.ouathlib import Oauth2Session
+
 # initialize Flask app with database
 load_dotenv()
 app = Flask(__name__)
