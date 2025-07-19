@@ -399,22 +399,31 @@ CATEGORY_TEXTS = {
     "World News": "china russia ukraine europe asia africa middle east un united nations war conflict diplomacy",
 }
 
+vectorizer = TfidfVectorizer(
+    stop_words="english",  # drop common words
+    ngram_range=(1, 2),  # include bigrams
+    sublinear_tf=True,  # dampen very frequent terms
+)
 CATEGORY_FINGERPRINTS = list(CATEGORY_TEXTS.values())
 CATEGORY_NAMES = list(CATEGORY_TEXTS.keys())
+# fit only on the fingerprints -> fixed IDF space
+fingerprint_matrix = vectorizer.fit_transform(CATEGORY_FINGERPRINTS)
+
 
 # Category Detection via TF-IDF + Cosine Similarity
 def categorize_article(text):
-    # group article and strings of keywords
-    texts = [text] + CATEGORY_FINGERPRINTS
-    # convert text to numerical representation as vector with weights
-    vectorizer = TfidfVectorizer().fit_transform(texts)
-    # calculate similarity between two vectors for each category
-    cosine_sim = cosine_similarity(vectorizer[0:1], vectorizer[1:]).flatten()
-    # find and return category with highest similarity score
-    max_index = cosine_sim.argmax()
-    return (
-        CATEGORY_NAMES[max_index] if cosine_sim[max_index] > 0.1 else "Other"
-    )
+    # vectorize the article alone
+    article_vec = vectorizer.transform([text])
+    # compute cosines VS pre-built fingerprints
+    sims = cosine_similarity(article_vec, fingerprint_matrix).flatten()
+    best_idx = sims.argmax()
+    best_score = sims[best_idx]
+
+    # low threshold
+    if best_score < 0.02:
+        return "Other"
+    return CATEGORY_NAMES[best_idx]
+
 
 # local analysis using trained ML model (out-of-the-loop-production-model)
 def get_local_analysis(text):
