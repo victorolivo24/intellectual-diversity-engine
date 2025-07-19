@@ -32,6 +32,9 @@ from transformers import pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import threading
+import sentry_sdk
+from sentry_sdk.integrations.flask import FlaskIntegration
+
 
 # initialize Flask app with database
 load_dotenv()
@@ -46,6 +49,19 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["GOOGLE_CLIENT_ID"] = os.getenv("GOOGLE_CLIENT_ID")
 app.config["GOOGLE_CLIENT_SECRET"] = os.getenv("GOOGLE_CLIENT_SECRET")
 app.config["GOOGLE_REDIRECT_URI"] = "http://127.0.0.1:5000/auth/google/callback"
+app.config["SENTRY_DSN"] = os.getenv("SENTRY_DSN")
+
+if app.config["SENTRY_DSN"]:
+    sentry_sdk.init(
+        dsn=app.config["SENTRY_DSN"],
+        integrations=[
+            FlaskIntegration(),
+        ],
+        # Set traces_sample_rate to 1.0 to capture 100%
+        # of transactions for performance monitoring.
+        traces_sample_rate=1.0,
+    )
+    print("Sentry error monitoring initialized for the backend.")
 
 db = SQLAlchemy(app)
 # specify path to nltk data
