@@ -34,18 +34,19 @@ from sklearn.metrics.pairwise import cosine_similarity
 import threading
 import sentry_sdk
 from sentry_sdk.integrations.flask import FlaskIntegration
-
+from config import config_by_name
 
 # initialize Flask app with database
 load_dotenv()
 app = Flask(__name__)
 CORS(app)
-# just for local testing, remover for production
+# Get the environment from the FLASK_ENV variable (defaults to 'dev')
+config_name = os.getenv("FLASK_ENV", "dev")
+# Load the configuration object from the config.py file
+app.config.from_object(config_by_name[config_name])
+# just for local testing, remove for production
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
-app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["GOOGLE_CLIENT_ID"] = os.getenv("GOOGLE_CLIENT_ID")
 app.config["GOOGLE_CLIENT_SECRET"] = os.getenv("GOOGLE_CLIENT_SECRET")
 app.config["GOOGLE_REDIRECT_URI"] = "http://127.0.0.1:5000/auth/google/callback"
