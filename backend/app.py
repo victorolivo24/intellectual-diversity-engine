@@ -423,81 +423,49 @@ def get_local_analysis(text):
 
 
 # API routes
+
+
 @app.route("/analyze", methods=["POST"])
 @token_required
 def analyze(current_user):
-    # get html content from client
     html_content = request.get_json().get("html_content")
     if not html_content:
-        return jsonify({"message": "HTML content not received"}), 400
+        return jsonify({"message": "HTML content is required"}), 400
 
     try:
         soup = BeautifulSoup(html_content, "html.parser")
 
-        # try to extract original url from metadata
+        # We still need the URL to check for existing articles later
         url_element = soup.find("link", rel="canonical")
         url = url_element["href"] if url_element else "Unknown URL"
 
-        # Check if this article is already in the database
-        existing = Article.query.filter_by(url=url).first()
-        if existing:
-            # create link between current user and existing article in reading_list association table
-            if existing not in current_user.articles:
-                current_user.articles.append(existing)
-                db.session.commit()
-            # send cached JSON back to browser extension
-            return jsonify(
-                {
-                    "message": "Article added to history",
-                    "data": {
-                        "title": existing.title,
-                        "sentiment": existing.sentiment_score,
-                        "keywords": existing.keywords,
-                        "category": existing.category,
-                        "article_text": existing.article_text,
-                    },
-                }
-            )
-
-        # extract title and text
         title = (
             soup.find("title").get_text(strip=True)
             if soup.find("title")
-            else "Untitled"
+            else "No Title"
         )
         text = extract_article_text(soup)
-        text = clean_article_text(text)
-        print(text)
-        # validate text
+
         if not text or len(text.strip()) < 100:
             return (
-                jsonify({"message": "⚠️ Article content was unavailable or too short."}),
+                jsonify(
+                    {
+                        "message": "Article content was unavailable or too short.",
+                        "data": None,
+                    }
+                ),
                 200,
             )
 
-        # pass clean text to local analysis pipeline
+        # Perform the analysis but do NOT save to the database yet
         sentiment, keywords, category = get_local_analysis(text)
 
-        # save results as Article in database
-        new_article = Article(
-            url=url,
-            title=title,
-            article_text=text,
-            sentiment_score=sentiment,
-            keywords=keywords,
-            category=category,
-        )
-        db.session.add(new_article)
-
-        # create link between current user and new article in reading_list association table
-        current_user.articles.append(new_article)
-        db.session.commit()
-
-        # send JSON back to browser extension
+        # Return the unsaved analysis data to the extension
         return jsonify(
             {
-                "message": "Article analyzed",
+                "message": "Analysis complete",
                 "data": {
+                    "url": url,  # Pass the URL along
                     "title": title,
                     "sentiment": sentiment,
                     "keywords": keywords,
@@ -506,23 +474,56 @@ def analyze(current_user):
                 },
             }
         )
-
     except Exception as e:
-        # undo any partial databased changes from failed transaction, prevents data corruption
-        db.session.rollback()
-
-        # return message based on error
-        user_friendly_msg = (
-            "An unexpected error occurred while analyzing this article. "
-            "It may not be compatible with our system."
-        )
-        # Log the detailed error for debugging
-        print(f"--- EXCEPTION IN /analyze: {e} ---", flush=True)
         import traceback
 
+        print(f"--- EXCEPTION IN /analyze: {e} ---", flush=True)
         traceback.print_exc()
+        db.session.rollback()
+        return jsonify({"message": "A server error occurred during analysis."}), 500
 
-        return jsonify({"message": user_friendly_msg}), 500
+
+@app.route("/save_analysis", methods=["POST"])
+@token_required
+def save_analysis(current_user):
+    data = request.get_json()
+
+    # Check if the user wants to save this to their history
+    if not data.get("save_to_history"):
+        return jsonify({"message": "Not saved."}), 200
+
+    try:
+        # Check if an article with this URL already exists in our main database
+        existing_article = Article.query.filter_by(url=data["url"]).first()
+
+        if existing_article:
+            # If it exists, just link it to the current user
+            if existing_article not in current_user.articles:
+                current_user.articles.append(existing_article)
+                db.session.commit()
+            return jsonify({"message": "Article added to history."}), 200
+        else:
+            # If it's a new article, create it and then link it
+            new_article = Article(
+                url=data["url"],
+                title=data["title"],
+                article_text=data["article_text"],
+                sentiment_score=data["sentiment"],
+                keywords=data["keywords"],
+                category=data["category"],
+            )
+            db.session.add(new_article)
+            current_user.articles.append(new_article)
+            db.session.commit()
+            return jsonify({"message": "New article saved and added to history."}), 201
+
+    except Exception as e:
+        import traceback
+
+        print(f"--- EXCEPTION IN /save_analysis: {e} ---", flush=True)
+        traceback.print_exc()
+        db.session.rollback()
+        return jsonify({"message": "A server error occurred while saving."}), 500
 
 
 # Single Sign-On (SSO) Routes

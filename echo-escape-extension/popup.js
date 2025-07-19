@@ -8,6 +8,16 @@ const DASHBOARD_URL = 'http://localhost:3000'; // Or whatever your local React d
 document.addEventListener('DOMContentLoaded', function () {
     const rootContainer = document.getElementById('root-container');
     checkAuthState(rootContainer);
+
+    // listener that waits for messages from other parts of the extension
+    chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
+        // Check if the message is the one we're looking for
+        if (request.action === "login_success") {
+            console.log("Login success message received, refreshing popup.");
+            // If so, re-run the authentication check to refresh the UI
+            checkAuthState(rootContainer);
+        }
+    });
 });
 
 
@@ -44,27 +54,61 @@ function checkAuthState(container) {
     });
 }
 // --- RENDER FUNCTIONS ---
+// display results and checkbox to save to dashboard
+function renderAnalysisView(container, userName) {
+    container.innerHTML = `
+        <div class="header"><span>Welcome, ${userName}!</span><a href="#" id="logout-button">Logout</a></div>
+        <p>Click to analyze the article on the current page.</p>
+        <button id="analyze-button" class="button">Analyze Page</button>
+        <div id="results-container" class="results-container"></div>
+        <div class="footer"><a href="#" id="dashboard-link">View Full Dashboard</a></div>
+    `;
+    document.getElementById('analyze-button').addEventListener('click', handleAnalysis);
+    document.getElementById('logout-button').addEventListener('click', (e) => { e.preventDefault(); handleLogout(container); });
+    document.getElementById('dashboard-link').addEventListener('click', (e) => { e.preventDefault(); handleDashboardLink(); });
+}
 
 
+function renderResults(container, analysisData) {
+    const keywordsHtml = analysisData.keywords.map(kw => `<li class="keyword-pill">${kw}</li>`).join('');
+    container.innerHTML = `
+        <div class="results-view">
+            <h4>Analysis Complete</h4>
+            <div class="result-item">
+                <strong>Sentiment Score:</strong>
+                <span class="sentiment-score" style="color: ${analysisData.sentiment > 0.05 ? '#28a745' : analysisData.sentiment < -0.05 ? '#dc3545' : 'inherit'}">
+                    ${analysisData.sentiment.toFixed(2)}
+                </span>
+            </div>
+            <div class="result-item">
+                <strong>Keywords:</strong>
+                <ul class="keywords-list">${keywordsHtml}</ul>
+            </div>
+            <hr class="results-divider">
+            <div class="save-option">
+                <input type="checkbox" id="save-history-checkbox" checked>
+                <label for="save-history-checkbox">Include in Dashboard</label>
+            </div>
+            <button id="done-button" class="button">Done</button>
+        </div>
+    `;
+
+    document.getElementById('done-button').addEventListener('click', () => {
+        handleSave(analysisData);
+    });
+}
 function renderLoginForm(container) {
     container.innerHTML = `
         <h3>Login</h3>
         <form id="auth-form">
-            <div class="form-group">
-                <label for="email">Email</label>
-                <input type="email" id="email" required>
-            </div>
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" required>
-            </div>
+            <div class="form-group"><label for="email">Email</label><input type="email" id="email" required></div>
+            <div class="form-group"><label for="password">Password</label><input type="password" id="password" required></div>
             <button type="submit" class="button">Login</button>
             <div id="error-message" class="error-message"></div>
         </form>
         
         <div style="text-align: center; margin: 10px 0; color: #666; font-size: 12px;">OR</div>
         
-        <!-- The link now has an ID so we can add a listener to it -->
         <a href="#" id="google-login-button" class="button google-button">
             Sign in with Google
         </a>
@@ -77,8 +121,7 @@ function renderLoginForm(container) {
         </p>
     `;
 
-    // event listeners for the form and links
-    document.getElementById('email').focus(); // Focus the email input by default
+    // --- EVENT LISTENERS ---
     document.getElementById('auth-form').addEventListener('submit', (e) => handleAuth('login', container, e));
     document.getElementById('show-register').addEventListener('click', (e) => { e.preventDefault(); renderRegisterForm(container); });
     document.getElementById('forgot-password-link').addEventListener('click', (e) => {
@@ -86,11 +129,14 @@ function renderLoginForm(container) {
         chrome.tabs.create({ url: `${DASHBOARD_URL}/reset-password` });
     });
 
+   
     document.getElementById('google-login-button').addEventListener('click', (e) => {
         e.preventDefault();
-        // Use the correct API to open the login page in a new tab
+        // 1. Open the login page in a new tab
         chrome.tabs.create({ url: 'http://127.0.0.1:5000/login/google?state=extension' });
-        window.close(); // Close the popup after the user clicks
+
+        // 2. Update the popup to show a waiting message instead of closing
+        container.innerHTML = `<div style="text-align: center; padding: 20px;"><p>Waiting for Google Sign-In to complete...</p><p style="font-size:12px;">Please complete the login in the new tab.</p></div>`;
     });
 }
 
@@ -165,39 +211,41 @@ function renderAnalysisView(container, email) {
     });
 }
 
-function renderResults(container, data) {
-
-    if (data === null) {
-        container.innerHTML = `
-            <div class="error-message">
-                ⚠️ ${message}
-            </div>
-        `;
-        return;
-    }
-
-    
-  
-
-    const keywordsHtml = data.keywords.map(kw => `<li class="keyword-pill">${kw}</li>`).join('');
-
-    container.innerHTML = `
-        <h4>Analysis for: ${data.title}</h4>
-        <div class="result-item">
-            <strong>Sentiment Score:</strong>
-            <span class="sentiment-score" style="color: ${data.sentiment > 0.05 ? '#28a745' : data.sentiment < -0.05 ? '#dc3545' : 'inherit'}">
-                ${data.sentiment.toFixed(2)}
-            </span>
-        </div>
-        <div class="result-item">
-            <strong>Keywords:</strong>
-            <ul class="keywords-list">${keywordsHtml}</ul>
-        </div>
-    `;
-}
-
-
 // --- HANDLER FUNCTIONS ---
+function handleSave(analysisData) {
+    const shouldSave = document.getElementById('save-history-checkbox').checked;
+
+    // We only need to talk to the backend if the user wants to save.
+    if (shouldSave) {
+        chrome.storage.sync.get(['token'], function (result) {
+            if (!result.token) {
+                console.error("Cannot save, user not logged in.");
+                return;
+            }
+            // Send all the analysis data to a new /save route
+            fetch(`${API_URL}/save_analysis`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-access-token': result.token
+                },
+                body: JSON.stringify({
+                    ...analysisData, // Includes title, sentiment, keywords, etc.
+                    save_to_history: true
+                })
+            }).then(res => {
+                if (res.ok) console.log("Analysis saved to history.");
+                window.close(); // Close the popup
+            }).catch(err => {
+                console.error("Failed to save analysis:", err);
+                window.close();
+            });
+        });
+    } else {
+        // If the user unchecks the box, just close the popup.
+        window.close();
+    }
+}
 
 function handleLogout(container) {
     chrome.storage.sync.remove(['token', 'email'], () => {
@@ -249,12 +297,12 @@ function handleAuth(mode, container, e) {
 function handleAnalysis() {
     const analyzeButton = document.getElementById('analyze-button');
     const resultsContainer = document.getElementById('results-container');
+    const rootContainer = document.getElementById('root-container');
 
     resultsContainer.innerHTML = 'Getting page content...';
     analyzeButton.textContent = 'Working...';
     analyzeButton.disabled = true;
 
-    // Send a message to the background script to get the page content
     chrome.runtime.sendMessage({ action: "get_page_content" }, function (response) {
         if (chrome.runtime.lastError || !response || !response.page_html) {
             resultsContainer.innerHTML = `<div class="error-message">Could not get content from this page.</div>`;
@@ -263,24 +311,19 @@ function handleAnalysis() {
             return;
         }
 
-        resultsContainer.innerHTML = '<div style="text-align: center; padding: 10px;"><div class="spinner"></div><p>Analyzing...</p></div>';
+        resultsContainer.innerHTML = 'Analyzing...';
         const pageHtml = response.page_html;
 
-        // Get the stored token
         chrome.storage.sync.get(['token'], function (result) {
             if (!result.token) {
                 resultsContainer.innerHTML = '<div class="error-message">Error: Not logged in.</div>';
                 return;
             }
 
-            //  Send the FULL HTML to the backend for analysis
             fetch(`${API_URL}/analyze`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-access-token': result.token
-                },
-                body: JSON.stringify({ html_content: pageHtml }) // Send HTML instead of URL
+                headers: { 'Content-Type': 'application/json', 'x-access-token': result.token },
+                body: JSON.stringify({ html_content: pageHtml })
             })
                 .then(res => {
                     if (!res.ok) return res.json().then(err => { throw new Error(err.message) });
@@ -288,6 +331,7 @@ function handleAnalysis() {
                 })
                 .then(data => {
                     if (data.data) {
+                        // On success, call the new renderResults function
                         renderResults(resultsContainer, data.data);
                     } else {
                         throw new Error(data.message || 'Analysis failed.');
@@ -295,12 +339,8 @@ function handleAnalysis() {
                 })
                 .catch(error => {
                     resultsContainer.innerHTML = `<div class="error-message">${error.message}</div>`;
-                })
-                .finally(() => {
-                    if (document.contains(analyzeButton)) {
-                        analyzeButton.textContent = 'Analyze Page';
-                        analyzeButton.disabled = false;
-                    }
+                    analyzeButton.textContent = 'Analyze Page';
+                    analyzeButton.disabled = false;
                 });
         });
     });
