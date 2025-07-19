@@ -751,7 +751,7 @@ def perform_password_reset():
     # Find the token in the database
     reset_token = PasswordResetToken.query.filter_by(token=token).first()
 
-    # --- Security Checks ---
+    # Security Checks
     if (
         not reset_token
         or reset_token.is_used
@@ -775,9 +775,11 @@ def perform_password_reset():
 @app.route("/login/google")
 def google_login():
     """
-    Redirects the user to Google's authentication page.
+    Redirects the user to Google's authentication page, remembering the origin.
     """
-    # Define the "scopes" - what information we are asking for
+    # Get the origin ('dashboard' or 'extension') from the URL
+    origin_state = request.args.get("state", "dashboard")  # Default to dashboard
+
     scope = [
         "https://www.googleapis.com/auth/userinfo.email",
         "https://www.googleapis.com/auth/userinfo.profile",
@@ -787,35 +789,34 @@ def google_login():
         scope=scope,
         redirect_uri=app.config["GOOGLE_REDIRECT_URI"],
     )
-    # Generate the authorization URL and a state token for security
     authorization_url, state = google.authorization_url(
         "https://accounts.google.com/o/oauth2/v2/auth",
         access_type="offline",
         prompt="select_account",
     )
-    # Store the state in the session to verify it later
+
+    # Store both the OAuth state and our origin state in the session
     session["oauth_state"] = state
-    # Send the user to Google to sign in
+    session["origin_state"] = origin_state
+
     return redirect(authorization_url)
 
 
 @app.route("/auth/google/callback")
 def google_callback():
     """
-    Handles the callback from Google after a user authenticates.
+    Handles the callback from Google and redirects based on the origin.
     """
     google = OAuth2Session(
         app.config["GOOGLE_CLIENT_ID"],
         state=session.get("oauth_state"),
         redirect_uri=app.config["GOOGLE_REDIRECT_URI"],
     )
-    # Exchange the authorization code for an access token
     token = google.fetch_token(
         "https://www.googleapis.com/oauth2/v4/token",
         client_secret=app.config["GOOGLE_CLIENT_SECRET"],
         authorization_response=request.url,
     )
-    # Use the access token to get the user's profile info
     user_info = google.get("https://www.googleapis.com/oauth2/v1/userinfo").json()
 
     if not user_info.get("verified_email"):
@@ -826,23 +827,28 @@ def google_callback():
     # Find or create the user in our database
     user = User.query.filter_by(email=user_email).first()
     if not user:
-        # Create a new user with a random password, as they will only use Google to log in
         new_password = secrets.token_urlsafe(16)
         user = User(email=user_email)
         user.set_password(new_password)
         db.session.add(user)
         db.session.commit()
 
-    # Issue our application's own JWT token for the session
+    # Issue our application's own JWT token
     app_token = jwt.encode(
         {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
         app.config["SECRET_KEY"],
         "HS256",
     )
 
-    # Redirect the user back to the main dashboard with the token
-    # This is similar to our SSO flow
-    return redirect(f"http://localhost:3000?token={app_token}")
+    # Check where the login started and redirect to the correct place
+    origin = session.get("origin_state", "dashboard")
+    if origin == "extension":
+        extension_id = "meagfogmfpihfoonefiokmeidplpleeb"  
+        return redirect(
+            f"chrome-extension://{extension_id}/oauth_callback.html?token={app_token}&email={user.email}"
+        )
+    else:  # Default to dashboard
+        return redirect(f"http://localhost:3000?token={app_token}&email={user.email}")
 
 
 # Dashboard Data Endpoints

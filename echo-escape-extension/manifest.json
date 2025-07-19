@@ -31,5 +31,15 @@
         "content.js"
       ]
     }
-  ]
+  ],
+"web_accessible_resources": [
+  {
+    "resources": [
+      "oauth_callback.html"
+    ],
+    "matches": [
+      "<all_urls>"
+    ]
+  }
+]
 }

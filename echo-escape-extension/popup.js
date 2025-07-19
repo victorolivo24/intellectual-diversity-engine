@@ -33,25 +33,26 @@ function checkAuthState(container) {
             })
             .then(data => {
                 // Success! The token is valid.
-                renderAnalysisView(container, data.username);
+                renderAnalysisView(container, data.email);
             })
             .catch(error => {
                 // The token was invalid. Log the user out of the extension.
                 console.error("Token validation failed:", error.message);
-                chrome.storage.sync.remove(['token', 'username']);
+                chrome.storage.sync.remove(['token', 'email']);
                 renderLoginForm(container);
             });
     });
 }
 // --- RENDER FUNCTIONS ---
 
+
 function renderLoginForm(container) {
     container.innerHTML = `
         <h3>Login</h3>
         <form id="auth-form">
             <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" required>
+                <label for="email">Email</label>
+                <input type="email" id="email" required>
             </div>
             <div class="form-group">
                 <label for="password">Password</label>
@@ -60,7 +61,15 @@ function renderLoginForm(container) {
             <button type="submit" class="button">Login</button>
             <div id="error-message" class="error-message"></div>
         </form>
-        <p class="auth-switch">
+        
+        <div style="text-align: center; margin: 10px 0; color: #666; font-size: 12px;">OR</div>
+        
+        <!-- The link now has an ID so we can add a listener to it -->
+        <a href="#" id="google-login-button" class="button google-button">
+            Sign in with Google
+        </a>
+        
+        <p class="auth-switch" style="margin-top: 15px;">
             Don't have an account? <a href="#" id="show-register">Register</a>
         </p>
         <p class="auth-switch" style="margin-top: 5px;">
@@ -68,30 +77,30 @@ function renderLoginForm(container) {
         </p>
     `;
 
-    // Add event listener for the login form
+    // event listeners for the form and links
+    document.getElementById('email').focus(); // Focus the email input by default
     document.getElementById('auth-form').addEventListener('submit', (e) => handleAuth('login', container, e));
-
-    // Add event listener for the "Register" link
-    document.getElementById('show-register').addEventListener('click', (e) => {
-        e.preventDefault();
-        renderRegisterForm(container);
-    });
-    // This handles the "Forgot Password?" link
+    document.getElementById('show-register').addEventListener('click', (e) => { e.preventDefault(); renderRegisterForm(container); });
     document.getElementById('forgot-password-link').addEventListener('click', (e) => {
         e.preventDefault();
-        // Open the main website's reset page in a new tab
         chrome.tabs.create({ url: `${DASHBOARD_URL}/reset-password` });
     });
-}
 
+    document.getElementById('google-login-button').addEventListener('click', (e) => {
+        e.preventDefault();
+        // Use the correct API to open the login page in a new tab
+        chrome.tabs.create({ url: 'http://127.0.0.1:5000/login/google?state=extension' });
+        window.close(); // Close the popup after the user clicks
+    });
+}
 
 function renderRegisterForm(container) {
     container.innerHTML = `
         <h3>Register</h3>
         <form id="auth-form">
             <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" required>
+                <label for="email">Email</label>
+                <input type="text" id="email" required>
             </div>
             <div class="form-group">
                 <label for="password">Password</label>
@@ -110,10 +119,10 @@ function renderRegisterForm(container) {
     });
 }
 
-function renderAnalysisView(container, username) {
+function renderAnalysisView(container, email) {
     container.innerHTML = `
         <div class="header">
-            <span>Welcome, ${username}!</span>
+            <span>Welcome, ${email}!</span>
             <a href="#" id="logout-button">Logout</a>
         </div>
         <p>Click to analyze the article on the current page.</p>
@@ -191,14 +200,14 @@ function renderResults(container, data) {
 // --- HANDLER FUNCTIONS ---
 
 function handleLogout(container) {
-    chrome.storage.sync.remove(['token', 'username'], () => {
+    chrome.storage.sync.remove(['token', 'email'], () => {
         renderLoginForm(container);
     });
 }
 
 function handleAuth(mode, container, e) {
     e.preventDefault();
-    const username = document.getElementById('username').value;
+    const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
     const errorMessageDiv = document.getElementById('error-message');
     const submitButton = e.target.querySelector('button');
@@ -210,7 +219,7 @@ function handleAuth(mode, container, e) {
     fetch(`${API_URL}/${mode}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ email, password })
     })
         .then(response => {
             if (!response.ok) {
@@ -220,7 +229,7 @@ function handleAuth(mode, container, e) {
         })
         .then(data => {
             if (mode === 'login') {
-                chrome.storage.sync.set({ token: data.token, refreshToken: data.refresh_token, username: data.username }, () => {
+                chrome.storage.sync.set({ token: data.token, refreshToken: data.refresh_token, email: data.email }, () => {
                     checkAuthState(container);
                 });
             } else {

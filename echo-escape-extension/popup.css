@@ -38,14 +38,12 @@ label {
 }
 
 input[type="text"],
-input[type="password"] {
-    width: 95%;
-    padding: 10px;
-    border: 1px solid #555;
-    background-color: #2a2d30;
-    color: #f5f6f7;
+input[type="password"],
+input[type="email"] {
+    width: calc(100% - 18px);
+    padding: 8px;
+    border: 1px solid #dddfe2;
     border-radius: 6px;
-    transition: border-color 0.2s ease;
 }
 
 input[type="text"]:focus,
@@ -182,7 +180,35 @@ input[type="password"]:focus {
     margin: 10px auto;
     /* Center the spinner */
 }
+.google-button {
+    display: block;
+    text-decoration: none;
+    background-color: #4285F4;
+    margin-top: 10px;
+}
 
+.button:hover {
+    background-color: #166fe5;
+}
+
+.error-message {
+    color: #fa383e;
+    text-align: center;
+    margin-top: 10px;
+    font-size: 13px;
+}
+
+.auth-switch {
+    text-align: center;
+    font-size: 12px;
+    margin-top: 15px;
+}
+
+.auth-switch a {
+    color: #1877f2;
+    text-decoration: none;
+    font-weight: bold;
+}
 /* This is the spinning animation */
 @keyframes spin {
     0% {

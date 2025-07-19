@@ -33,7 +33,7 @@ export default function AuthComponent({ onAuth }) {
       </form>
       <div style={{ textAlign: 'center', margin: '15px 0', color: '#666', fontWeight: 'bold' }}>OR</div>
       <a
-        href="http://127.0.0.1:5000/login/google"
+        href="http://127.0.0.1:5000/login/google?state=dashboard"
         style={{
           ...styles.button,
           textDecoration: 'none',
