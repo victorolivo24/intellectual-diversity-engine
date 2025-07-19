@@ -90,6 +90,11 @@ function renderResults(container, analysisData) {
                 <label for="save-history-checkbox">Include in Dashboard</label>
             </div>
             <button id="done-button" class="button">Done</button>
+            <div id="history-info" class="history-info hidden">
+                You’ve saved <span id="history-count"></span> articles.
+            </div>
+
+
         </div>
     `;
 
@@ -233,19 +238,34 @@ function handleSave(analysisData) {
                     ...analysisData, // Includes title, sentiment, keywords, etc.
                     save_to_history: true
                 })
-            }).then(res => {
-                if (res.ok) console.log("Analysis saved to history.");
-                window.close(); // Close the popup
-            }).catch(err => {
-                console.error("Failed to save analysis:", err);
-                window.close();
-            });
+            })
+                .then(res => res.json())
+                .then(json => {
+                    showToast(json.message);
+                    // hide Done button
+                    document.getElementById('done-button')?.remove();
+                    // remove the include-in-dashboard option
+                    document.querySelector('.save-option')?.remove();
+                    // now reveal the history count
+                    showHistoryInfo(json.count);
+                })
+                .catch(err => {
+                    console.error("Failed to save analysis:", err);
+                    showToast('Save failed');
+                    document.getElementById('done-button')?.remove();
+                    document.querySelector('.save-option')?.remove();
+                });
         });
     } else {
-        // If the user unchecks the box, just close the popup.
-        window.close();
+        // user opted out of saving
+        showToast('Skipped saving');
+        document.getElementById('done-button')?.remove();
+        document.querySelector('.save-option')?.remove();
     }
 }
+
+
+
 
 function handleLogout(container) {
     chrome.storage.sync.remove(['token', 'email'], () => {
@@ -299,9 +319,21 @@ function handleAnalysis() {
     const resultsContainer = document.getElementById('results-container');
     const rootContainer = document.getElementById('root-container');
 
-    resultsContainer.innerHTML = 'Getting page content...';
-    analyzeButton.textContent = 'Working...';
+    //  Disable button
     analyzeButton.disabled = true;
+    analyzeButton.textContent = '';
+
+    //  Inject skeleton UI
+    resultsContainer.innerHTML = `
+  <div class="skeleton title"></div>
+  <div class="skeleton sentiment"></div>
+  <ul class="skeleton-list">
+    <li class="skeleton-item"></li>
+    <li class="skeleton-item"></li>
+    <li class="skeleton-item"></li>
+  </ul>
+`;
+    // Send message to background script to get the current page content
 
     chrome.runtime.sendMessage({ action: "get_page_content" }, function (response) {
         if (chrome.runtime.lastError || !response || !response.page_html) {
@@ -344,4 +376,22 @@ function handleAnalysis() {
                 });
         });
     });
+}
+function showHistoryInfo(count) {
+    document.getElementById('history-count').textContent = count;
+    const info = document.getElementById('history-info');
+    info.classList.remove('hidden');
+    document.getElementById('view-dashboard-link')
+        .addEventListener('click', openDashboard);
+}
+
+function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.remove('hidden');
+    toast.classList.add('show');
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.classList.add('hidden');
+    }, 2500);
 }

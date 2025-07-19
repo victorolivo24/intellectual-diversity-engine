@@ -487,23 +487,20 @@ def analyze(current_user):
 @token_required
 def save_analysis(current_user):
     data = request.get_json()
-
-    # Check if the user wants to save this to their history
     if not data.get("save_to_history"):
-        return jsonify({"message": "Not saved."}), 200
+        return (
+            jsonify({"message": "Not saved.", "count": len(current_user.articles)}),
+            200,
+        )
 
     try:
-        # Check if an article with this URL already exists in our main database
-        existing_article = Article.query.filter_by(url=data["url"]).first()
-
-        if existing_article:
-            # If it exists, just link it to the current user
-            if existing_article not in current_user.articles:
-                current_user.articles.append(existing_article)
+        existing = Article.query.filter_by(url=data["url"]).first()
+        if existing:
+            if existing not in current_user.articles:
+                current_user.articles.append(existing)
                 db.session.commit()
-            return jsonify({"message": "Article added to history."}), 200
+            message = "Article added to history."
         else:
-            # If it's a new article, create it and then link it
             new_article = Article(
                 url=data["url"],
                 title=data["title"],
@@ -515,13 +512,13 @@ def save_analysis(current_user):
             db.session.add(new_article)
             current_user.articles.append(new_article)
             db.session.commit()
-            return jsonify({"message": "New article saved and added to history."}), 201
+            message = "New article saved and added to history."
+
+        # Now count them
+        count = len(current_user.articles)
+        return jsonify({"message": message, "count": count}), 200
 
     except Exception as e:
-        import traceback
-
-        print(f"--- EXCEPTION IN /save_analysis: {e} ---", flush=True)
-        traceback.print_exc()
         db.session.rollback()
         return jsonify({"message": "A server error occurred while saving."}), 500
 
