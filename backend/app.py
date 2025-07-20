@@ -929,20 +929,69 @@ def source_analysis(current_user):
     return jsonify(result)
 
 
+# In app.py
+
+
 @app.route("/sentiment_timeline", methods=["GET"])
 @token_required
 def sentiment_timeline(current_user):
-    daily_sentiments = defaultdict(list)
+    """
+    Groups articles by date and calculates the average sentiment
+    and article count for each day.
+    """
+    daily_data = defaultdict(lambda: {"scores": [], "count": 0})
+
     for article in current_user.articles:
         day = article.retrieved_at.strftime("%Y-%m-%d")
-        daily_sentiments[day].append(article.sentiment_score)
-    analysis_results = [
-        {"date": day, "average_sentiment": sum(scores) / len(scores)}
-        for day, scores in daily_sentiments.items()
-        if scores
-    ]
+        daily_data[day]["scores"].append(article.sentiment_score)
+        daily_data[day]["count"] += 1
+
+    analysis_results = []
+    for day, data in daily_data.items():
+        if data["count"] > 0:
+            average = sum(data["scores"]) / len(data["scores"])
+            analysis_results.append(
+                {
+                    "date": day,
+                    "average_sentiment": average,
+                    "article_count": data["count"],  # Add the article count
+                }
+            )
+
     analysis_results.sort(key=lambda item: item["date"])
+
     return jsonify(analysis_results)
+
+
+@app.route("/move_article", methods=["POST"])
+@token_required
+def move_article(current_user):
+    data = request.get_json()
+    article_id = data.get("article_id")
+    new_category = data.get("new_category")
+
+    # Combine all topics for validation
+    custom_topics = [
+        topic.name for topic in UserTopic.query.filter_by(user_id=current_user.id).all()
+    ]
+    valid_categories = DEFAULT_TOPICS + custom_topics
+
+    if not article_id or not new_category or new_category not in valid_categories:
+        return jsonify({"message": "Invalid request data"}), 400
+
+    article = db.session.get(Article, article_id)
+
+    if not article or article not in current_user.articles:
+        return jsonify({"message": "Article not found or access denied"}), 404
+
+    article.category = new_category
+    db.session.commit()
+    return jsonify(
+        {
+            "message": f"Article '{article.title}' moved to '{new_category}' successfully."
+        }
+    )
+
 
 # Topic Mangement Routes
 @app.route("/topics", methods=["GET"])
