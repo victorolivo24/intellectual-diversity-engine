@@ -3,6 +3,23 @@
 const API_URL = 'http://127.0.0.1:5000';
 // We'll replace this with the real URL after deploying the dashboard website
 const DASHBOARD_URL = 'http://localhost:3000'; // Or whatever your local React dev server is
+// Called by platform.js once it loads
+window.onGoogleLibraryLoad = function () {
+    // render into the div that our renderLoginForm will inject
+    gapi.signin2.render('google-signin-button', {
+        scope: 'profile email',
+        width: 240,
+        longtitle: true,
+        theme: 'light',
+        onsuccess: onGoogleSignIn
+    });
+};
+
+// Called by Google when the user signs in
+window.onGoogleSignIn = function (googleUser) {
+    const idToken = googleUser.getAuthResponse().id_token;
+    // … your existing fetch to /login/google etc …
+};
 
 // This is the main function that runs when the popup is opened
 document.addEventListener('DOMContentLoaded', function () {
@@ -102,6 +119,8 @@ function renderResults(container, analysisData) {
         handleSave(analysisData);
     });
 }
+// In popup.js
+
 function renderLoginForm(container) {
     container.innerHTML = `
         <h3>Login</h3>
@@ -114,8 +133,20 @@ function renderLoginForm(container) {
         
         <div style="text-align: center; margin: 10px 0; color: #666; font-size: 12px;">OR</div>
         
-        <a href="#" id="google-login-button" class="button google-button">
-            Sign in with Google
+        <!-- THIS IS THE NEW GOOGLE BUTTON -->
+        <a href="#" id="google-login-button" class="google-btn">
+            <div class="google-icon-wrapper">
+                <svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="18px" height="18px" viewBox="0 0 48 48">
+                    <g>
+                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.42-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 11.22l7.97-6.22z"></path>
+                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                        <path fill="none" d="M0 0h48v48H0z"></path>
+                    </g>
+                </svg>
+            </div>
+            <p class="btn-text"><b>Sign in with Google</b></p>
         </a>
         
         <p class="auth-switch" style="margin-top: 15px;">
@@ -126,24 +157,21 @@ function renderLoginForm(container) {
         </p>
     `;
 
-    // --- EVENT LISTENERS ---
+    // Wire up event listeners
     document.getElementById('auth-form').addEventListener('submit', (e) => handleAuth('login', container, e));
     document.getElementById('show-register').addEventListener('click', (e) => { e.preventDefault(); renderRegisterForm(container); });
     document.getElementById('forgot-password-link').addEventListener('click', (e) => {
         e.preventDefault();
         chrome.tabs.create({ url: `${DASHBOARD_URL}/reset-password` });
     });
-
-   
     document.getElementById('google-login-button').addEventListener('click', (e) => {
         e.preventDefault();
-        // 1. Open the login page in a new tab
-        chrome.tabs.create({ url: 'http://127.0.0.1:5000/login/google?state=extension' });
-
-        // 2. Update the popup to show a waiting message instead of closing
-        container.innerHTML = `<div style="text-align: center; padding: 20px;"><p>Waiting for Google Sign-In to complete...</p><p style="font-size:12px;">Please complete the login in the new tab.</p></div>`;
+        chrome.tabs.create({ url: `${API_URL}/login/google?state=extension` });
+        container.innerHTML = `<div style="text-align: center; padding: 20px;"><p>Waiting for Google Sign-In...</p></div>`;
     });
 }
+
+
 
 function renderRegisterForm(container) {
     container.innerHTML = `
@@ -217,52 +245,6 @@ function renderAnalysisView(container, email) {
 }
 
 // --- HANDLER FUNCTIONS ---
-function handleSave(analysisData) {
-    const shouldSave = document.getElementById('save-history-checkbox').checked;
-
-    // We only need to talk to the backend if the user wants to save.
-    if (shouldSave) {
-        chrome.storage.sync.get(['token'], function (result) {
-            if (!result.token) {
-                console.error("Cannot save, user not logged in.");
-                return;
-            }
-            // Send all the analysis data to a new /save route
-            fetch(`${API_URL}/save_analysis`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-access-token': result.token
-                },
-                body: JSON.stringify({
-                    ...analysisData, // Includes title, sentiment, keywords, etc.
-                    save_to_history: true
-                })
-            })
-                .then(res => res.json())
-                .then(json => {
-                    showToast(json.message);
-                    // hide Done button
-                    document.getElementById('done-button')?.remove();
-                    // remove the include-in-dashboard option
-                    document.querySelector('.save-option')?.remove();
-                    // now reveal the history count
-                    showHistoryInfo(json.count);
-                })
-                .catch(err => {
-                    console.error("Failed to save analysis:", err);
-                    showToast('Save failed');
-                    document.getElementById('done-button')?.remove();
-                    document.querySelector('.save-option')?.remove();
-                });
-        });
-    } else {
-        // user opted out of saving
-        showToast('Skipped saving');
-        document.getElementById('done-button')?.remove();
-        document.querySelector('.save-option')?.remove();
-    }
-}
 
 
 
@@ -377,12 +359,68 @@ function handleAnalysis() {
         });
     });
 }
+// show the history count once Save completes
 function showHistoryInfo(count) {
-    document.getElementById('history-count').textContent = count;
-    const info = document.getElementById('history-info');
-    info.classList.remove('hidden');
-    document.getElementById('view-dashboard-link')
-        .addEventListener('click', openDashboard);
+    const historyInfo = document.getElementById('history-info');
+    const countSpan = document.getElementById('history-count');
+    if (!historyInfo || !countSpan) {
+        console.warn('Cannot show history info: element(s) missing');
+        return;
+    }
+    countSpan.textContent = count;
+    historyInfo.classList.remove('hidden');
+}
+
+function handleSave(analysisData) {
+    const shouldSave = document.getElementById('save-history-checkbox').checked;
+
+    if (shouldSave) {
+        chrome.storage.sync.get(['token'], function (result) {
+            if (!result.token) {
+                console.error("Cannot save, user not logged in.");
+                return;
+            }
+            // Send all the analysis data to a new /save route
+            fetch(`${API_URL}/save_analysis`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-access-token': result.token
+                },
+                body: JSON.stringify({
+                    ...analysisData, // Includes title, sentiment, keywords, etc.
+                    save_to_history: true
+                })
+            })
+                .then(async response => {
+                    const json = await response.json();
+                    if (!response.ok) {
+                        throw new Error(json.message || 'Save failed');
+                    }
+                    return json;
+                })
+                .then(json => {
+                    showToast(json.message);
+                    // remove the Done button
+                    document.getElementById('done-button')?.remove();
+                    // remove the include-in-dashboard checkbox
+                    document.querySelector('.save-option')?.remove();
+                    // reveal the updated history count
+                    showHistoryInfo(json.count);
+                })
+                .catch(err => {
+                    console.error("Error saving analysis:", err);
+                    showToast(err.message);
+                    document.getElementById('done-button')?.remove();
+                    document.querySelector('.save-option')?.remove();
+                });
+        });
+    } else {
+        // user opted out of saving
+        showToast('Skipped saving');
+        document.getElementById('done-button')?.remove();
+        document.querySelector('.save-option')?.remove();
+    }
 }
 
 function showToast(message) {
