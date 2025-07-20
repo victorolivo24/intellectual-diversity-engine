@@ -1,7 +1,7 @@
 const styles = {
   container: {
-    backgroundColor: '#121212',
-    color: '#eaeaea',
+    backgroundColor: '#1c1e21',
+    color: '#f5f6f7',
     minHeight: '100vh',
     padding: '20px',
     fontFamily: 'Poppins, Arial, sans-serif',
@@ -10,8 +10,8 @@ const styles = {
     alignItems: 'center'
   },
   card: {
-    backgroundColor: '#1f1f1f',
-    color: '#eaeaea',
+    backgroundColor: '#2a2d30',
+    color: '#f5f6f7',
     borderRadius: '12px',
     boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
     padding: '20px',
@@ -19,7 +19,7 @@ const styles = {
     maxWidth: '800px'
   },
   button: {
-    backgroundColor: '#3b82f6',  // a clean blue accent
+    backgroundColor: '#28a745',
     color: 'white',
     border: 'none',
     padding: '10px 16px',
@@ -29,7 +29,7 @@ const styles = {
     fontSize: '14px'
   },
   buttonHover: {
-    backgroundColor: '#2563eb'
+    backgroundColor: '#218838'
   },
   input: {
     padding: '10px',
@@ -57,7 +57,7 @@ const styles = {
     borderRadius: '6px'
   },
   activeNavButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#28a745',
     color: 'white',
     fontWeight: '600'
   },
@@ -78,7 +78,7 @@ const styles = {
     marginTop: '10px'
   },
   wordItem: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#28a745',
     color: '#f1f1f1',
     borderRadius: '12px',
     padding: '5px 10px',
@@ -89,15 +89,17 @@ const styles = {
     borderCollapse: 'collapse'
   },
   tableHeader: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#28a745',
     color: 'white',
     fontSize: '13px',
-    padding: '8px'
+    padding: '8px',
+    textAlign: 'left'
   },
   tableCell: {
     borderBottom: '1px solid #333',
     padding: '8px',
-    fontSize: '12px'
+    fontSize: '12px',
+    verticalAlign: 'middle'
   }
 };
 export default styles;
