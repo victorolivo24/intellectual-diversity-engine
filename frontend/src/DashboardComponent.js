@@ -135,7 +135,7 @@ export default function DashboardComponent({ auth, onRefresh, setAuth, key }) {
     <div>
       <div style={{ ...styles.header, justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <p style={{ ...styles.welcomeMessage, margin: 0 }}>Welcome, {auth.email}!</p>
-        <button onClick={handleDeleteAccount} style={{ ...styles.logoutButton, color: '#dc3545' }}>
+        <button onClick={handleDeleteAccount} className="btn btn-danger btn-sm">
           Delete Account
         </button>
       </div>
@@ -236,10 +236,10 @@ export default function DashboardComponent({ auth, onRefresh, setAuth, key }) {
       )}
 
       <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-        <table style={styles.topicTable}>
+        <table className="table table-dark table-bordered align-middle" style={styles.topicTable}>
           <thead>
             <tr>
-              <th style={styles.tableHeader}>Topic</th>
+              <th style={styles.tableHeader} className="text-start">Topic</th>
               <th style={styles.tableHeader}>Articles</th>
               <th style={styles.tableHeader}>Avg. Score</th>
               <th style={styles.tableHeader}>Actions</th>
@@ -249,15 +249,16 @@ export default function DashboardComponent({ auth, onRefresh, setAuth, key }) {
             {state.topicAnalysis.map((item, i) => (
               <React.Fragment key={i}>
                 <tr>
-                  <td style={styles.tableCell}>{item.category}</td>
-                  <td style={styles.tableCell}>{item.article_count}</td>
+                  <td style={{ ...styles.tableCell, verticalAlign: 'middle' }}>{item.category}</td>
+                  <td style={{ ...styles.tableCell, verticalAlign: 'middle' }}>{item.article_count}</td>
                   <td style={{
                     ...styles.tableCell,
+                    verticalAlign: 'middle',
                     color: item.average_sentiment > 0.05 ? '#28a745' :
                       item.average_sentiment < -0.05 ? '#dc3545' : 'inherit',
                     fontWeight: 'bold'
                   }}>{item.average_sentiment.toFixed(2)}</td>
-                  <td style={styles.tableCell}>
+                  <td style={{ ...styles.tableCell, verticalAlign: 'middle' }}>
                     <button
                       onClick={() => setExpandedCategory(expandedCategory === item.category ? null : item.category)}
                       style={{ ...styles.button, padding: '5px 10px', fontSize: '12px' }}
