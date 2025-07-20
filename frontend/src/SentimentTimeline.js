@@ -1,7 +1,7 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
 
-// --- UPDATED: A custom component for our tooltip with correct color logic ---
+
 const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
         const data = payload[0].payload;
@@ -40,7 +40,8 @@ export default function SentimentTimeline({ data }) {
             <ResponsiveContainer>
                 <BarChart
                     data={data.slice(-15)}
-                    margin={{ top: 5, right: 20, left: -10, bottom: 5 }}
+                   
+                    margin={{ top: 5, right: 5, left: -10, bottom: 5 }}
                 >
                     <XAxis
                         dataKey="date"
@@ -58,7 +59,6 @@ export default function SentimentTimeline({ data }) {
 
                     <ReferenceLine y={0} stroke="#666" strokeDasharray="3 3" yAxisId="sentiment" />
 
-                    {/* UPDATED: Add maxBarSize to control the width */}
                     <Bar yAxisId="sentiment" dataKey="average_sentiment" name="Avg. Sentiment" maxBarSize={30}>
                         {data.slice(-15).map((entry, index) => (
                             <Cell
