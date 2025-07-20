@@ -1,5 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import styles from "./styles.js";
+import SentimentTimeline from './SentimentTimeline.js';
+import {
+  ComposedChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+  Cell
+} from 'recharts';
 
 export default function DashboardComponent({ auth, onRefresh, setAuth, key }) {
   const [state, setState] = useState({
@@ -331,42 +343,10 @@ export default function DashboardComponent({ auth, onRefresh, setAuth, key }) {
         </div>
         <div style={{ ...styles.card, padding: '20px' }}>
           <h3 style={styles.sectionTitle}>Sentiment Timeline</h3>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-around',
-            alignItems: 'flex-end',
-            height: '220px',
-            borderLeft: '2px solid #eee',
-            borderBottom: '2px solid #eee',
-            padding: '5px 0'
-          }}>
-            {state.timelineData.slice(-15).map(({ date, average_sentiment }) => {
-              const height = Math.abs(average_sentiment) * 100;
-              const color = average_sentiment > 0.05 ? '#28a745' :
-                average_sentiment < -0.05 ? '#dc3545' : '#6c757d';
-              const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-              return (
-                <div key={date} style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center',
-                  height: '100%', justifyContent: 'flex-end', flex: 1
-                }}>
-                  <div
-                    title={`Avg: ${average_sentiment.toFixed(2)} on ${formattedDate}`}
-                    style={{
-                      width: '25px',
-                      height: `${height}%`,
-                      backgroundColor: color,
-                      borderRadius: '4px 4px 0 0',
-                      cursor: 'pointer'
-                    }}
-                  />
-                  <span style={{ fontSize: '10px', marginTop: '5px', color: '#606770' }}>{formattedDate}</span>
-                </div>
-              );
-            })}
-          </div>
+          {/* We pass the timelineData from this component's state down as a prop */}
+          <SentimentTimeline data={state.timelineData} />
         </div>
-      </div>
+    </div>
     </div>
   );
 }

@@ -103,41 +103,31 @@ export default function App() {
           </h1>
         </div>
 
-        {/* navigation */}
+        {/* simple navigation: only Dashboard + Logout */}
         <div style={styles.nav}>
           <button
-            onClick={() => setView('dashboard')}
-            style={{
-              ...styles.navButton,
-              ...(view === 'dashboard' ? styles.activeNavButton : {})
-            }}>
+            style={{ ...styles.navButton, ...styles.activeNavButton }}
+          >
             Dashboard
           </button>
           <button
-            onClick={() => setView('analyze')}
-            style={{
-              ...styles.navButton,
-              ...(view === 'analyze' ? styles.activeNavButton : {})
-            }}>
-            Analyze
-          </button>
-          <button
             onClick={() => {
-              setAuth(null);
               sessionStorage.clear();
+              setAuth(null);
             }}
-            style={{
-              ...styles.navButton,
-              marginLeft: 'auto'
-            }}>
+            style={{ ...styles.navButton, marginLeft: 'auto' }}
+          >
             Logout
           </button>
         </div>
-        {view === 'dashboard' ? (
-          <DashboardComponent auth={auth} onRefresh={handleAnalysisComplete} setAuth={setAuth} key={dashboardKey} />
-        ) : (
-          <AnalysisComponent auth={auth} onBack={() => setView('dashboard')} onAnalysisComplete={handleAnalysisComplete} />
-        )}
+
+        {/* always show the dashboard */}
+        <DashboardComponent
+          auth={auth}
+          onRefresh={handleAnalysisComplete}
+          setAuth={setAuth}
+          refreshKey={dashboardKey}
+        />
       </div>
     </div>
   );
