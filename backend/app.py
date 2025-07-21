@@ -37,6 +37,8 @@ from sentry_sdk.integrations.flask import FlaskIntegration
 from config import config_by_name
 from flask_migrate import Migrate
 
+NLTK_DATA_DIR = os.path.join(os.path.dirname(__file__), "nltk_data")
+nltk.data.path.append(NLTK_DATA_DIR)
 # initialize Flask app with database
 load_dotenv()
 app = Flask(__name__)
@@ -77,6 +79,14 @@ pipeline_lock = threading.Lock()
 sentiment_pipeline = None
 # root words for keyword list
 lemmatizer = WordNetLemmatizer()
+
+try:
+    stopwords.words("english")
+except LookupError:
+    # This is now just a fallback, the build script should handle it.
+    print("Stopwords not found locally, attempting emergency download...")
+    nltk.download("stopwords", download_dir=NLTK_DATA_DIR)
+    
 # buld stopwords set
 stop_words = set(stopwords.words("english"))
 custom_stopwords = {

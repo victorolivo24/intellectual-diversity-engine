@@ -8,3 +8,6 @@ __pycache__/
 
 # model artifacts
 out-of=the-loop-production-model/
+
+# NLTK Data
+nltk_data/
