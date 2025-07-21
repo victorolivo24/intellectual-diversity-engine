@@ -80,28 +80,32 @@ export default function App() {
       </div>
     );
   }
-
   return (
     <div style={styles.container}>
       <div style={styles.card}>
         {/* logo and header */}
         <div style={{
           display: 'flex',
+          justifyContent: 'center',
           alignItems: 'center',
-          gap: '10px',
-          marginBottom: '16px',
           borderBottom: '1px solid #333',
-          paddingBottom: '8px'
-        }}>
+          padding: '0 16px',
+          width: '100%',
+          height: '64px', // or your preferred header height
+          overflow: 'hidden'
+        }
+}>
           <img
             src="/transparentlogo.png"
             alt="Out of the Loop logo"
-            style={{ width: '32px', height: '32px', borderRadius: '4px' }}
+            style={{
+              maxHeight: '500px', // increased height for a larger logo
+              width: '38%',
+              objectFit: 'contain'
+            }}
           />
-          <h1 style={{ fontSize: '18px', fontWeight: '600', margin: 0 }}>
-            Out of the Loop
-          </h1>
         </div>
+
 
         {/* simple navigation: only Dashboard + Logout */}
         <div style={styles.nav}>

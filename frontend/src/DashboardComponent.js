@@ -1,19 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import styles from "./styles.js";
 import SentimentTimeline from './SentimentTimeline.js';
-import {
-  ComposedChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-  Cell
-} from 'recharts';
 
-export default function DashboardComponent({ auth, onRefresh, setAuth, key }) {
+
+export default function DashboardComponent({ auth, setAuth, key }) {
   const [state, setState] = useState({
     loading: true,
     error: null,
@@ -47,32 +37,32 @@ export default function DashboardComponent({ auth, onRefresh, setAuth, key }) {
     };
     fetchTopics();
   }, [auth.token]);
-  
+  const fetchData = async () => {
+    setState(s => ({ ...s, loading: true }));
+    try {
+      const [articlesRes, topicsRes, sourcesRes, timelineRes] = await Promise.all([
+        fetch('http://127.0.0.1:5000/dashboard', { headers: { 'x-access-token': auth.token } }),
+        fetch('http://127.0.0.1:5000/category_analysis', { headers: { 'x-access-token': auth.token } }),
+        fetch('http://127.0.0.1:5000/source_analysis', { headers: { 'x-access-token': auth.token } }),
+        fetch('http://127.0.0.1:5000/sentiment_timeline', { headers: { 'x-access-token': auth.token } })
+      ]);
+      if (!articlesRes.ok || !topicsRes.ok || !sourcesRes.ok || !timelineRes.ok)
+        throw new Error("Could not fetch all dashboard data.");
+
+      const articles = await articlesRes.json();
+      const topicAnalysis = await topicsRes.json();
+      const sourceData = await sourcesRes.json();
+      const timelineData = await timelineRes.json();
+
+      setState({ loading: false, error: null, articles, topicAnalysis, sourceData, timelineData });
+    } catch (err) {
+      setState({ loading: false, error: err.message, articles: [], topicAnalysis: [], sourceData: [], timelineData: [] });
+    }
+  };
 
   useEffect(() => {
     if (!auth.token) return;
-    const fetchData = async () => {
-      setState(s => ({ ...s, loading: true }));
-      try {
-        const [articlesRes, topicsRes, sourcesRes, timelineRes] = await Promise.all([
-          fetch('http://127.0.0.1:5000/dashboard', { headers: { 'x-access-token': auth.token } }),
-          fetch('http://127.0.0.1:5000/category_analysis', { headers: { 'x-access-token': auth.token } }),
-          fetch('http://127.0.0.1:5000/source_analysis', { headers: { 'x-access-token': auth.token } }),
-          fetch('http://127.0.0.1:5000/sentiment_timeline', { headers: { 'x-access-token': auth.token } })
-        ]);
-        if (!articlesRes.ok || !topicsRes.ok || !sourcesRes.ok || !timelineRes.ok)
-          throw new Error("Could not fetch all dashboard data.");
-
-        const articles = await articlesRes.json();
-        const topicAnalysis = await topicsRes.json();
-        const sourceData = await sourcesRes.json();
-        const timelineData = await timelineRes.json();
-
-        setState({ loading: false, error: null, articles, topicAnalysis, sourceData, timelineData });
-      } catch (err) {
-        setState({ loading: false, error: err.message, articles: [], topicAnalysis: [], sourceData: [], timelineData: [] });
-      }
-    };
+    
     fetchData();
   }, [auth.token, key]);
 
@@ -80,11 +70,20 @@ export default function DashboardComponent({ auth, onRefresh, setAuth, key }) {
     try {
       const res = await fetch('http://127.0.0.1:5000/move_article', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-access-token': auth.token },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-access-token': auth.token
+        },
         body: JSON.stringify({ article_id: articleId, new_category: newCategory })
       });
-      if (!res.ok) throw new Error(await res.json().then(e => e.message));
-      if (onRefresh) onRefresh();
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Failed to move article.');
+      }
+
+      await fetchData();  // ✅ this now guarantees UI is up-to-date
+
     } catch (err) {
       console.error("Move article error:", err);
     }
@@ -198,16 +197,27 @@ export default function DashboardComponent({ auth, onRefresh, setAuth, key }) {
                       headers: { 'Content-Type': 'application/json', 'x-access-token': auth.token },
                       body: JSON.stringify({ name: newTopicName })
                     });
+
                     if (!res.ok) throw new Error(await res.json().then(e => e.message));
-                    onRefresh(); // triggers a data reload
+
+                    // ✅ Re-fetch updated topics list
+                    const topicsRes = await fetch('http://127.0.0.1:5000/topics', {
+                      headers: { 'x-access-token': auth.token }
+                    });
+                    const topicsData = await topicsRes.json();
+                    setAllCategories([...topicsData.default_topics, ...topicsData.custom_topics]);
+
+                    // ✅ Also refresh full dashboard data
+                    await fetchData();
+
                     setShowTopicModal(false);
                     setNewTopicName('');
                     alert("✅ Topic created successfully!");
-
                   } catch (err) {
                     alert(err.message);
                   }
                 }}
+
                 style={{
                   backgroundColor: '#28a745',
                   color: 'white',

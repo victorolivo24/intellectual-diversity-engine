@@ -24,11 +24,17 @@ export default function AuthComponent({ onAuth }) {
 
   return (
     <div style={styles.card}>
-      <img
-        src="/transparentlogo.png"
-        alt="Out of the Loop"
-        style={{ width: '60px', height: '60px', display: 'block', margin: '0 auto 10px' }}
-      />
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <img
+          src="/transparentlogo.png"
+          alt="Out of the Loop"
+          style={{
+            maxHeight: '500px', // increased height for a larger logo
+            width: '40%',
+            objectFit: 'contain'
+          }}
+        />
+      </div>
       <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>{mode==='login' ? 'Login' : 'Register'}</h2>
       <form onSubmit={submit} style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
         <input placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required style={styles.input}/>
