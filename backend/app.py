@@ -929,9 +929,6 @@ def source_analysis(current_user):
     return jsonify(result)
 
 
-# In app.py
-
-
 @app.route("/sentiment_timeline", methods=["GET"])
 @token_required
 def sentiment_timeline(current_user):
