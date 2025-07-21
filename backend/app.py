@@ -35,6 +35,7 @@ import threading
 import sentry_sdk
 from sentry_sdk.integrations.flask import FlaskIntegration
 from config import config_by_name
+from flask_migrate import Migrate
 
 # initialize Flask app with database
 load_dotenv()
@@ -65,6 +66,9 @@ if app.config["SENTRY_DSN"]:
     print("Sentry error monitoring initialized for the backend.")
 
 db = SQLAlchemy(app)
+# connect migration engine
+migrate = Migrate(app, db)
+
 # specify path to nltk data
 nltk.data.path.append("C:/Users/victo/AppData/Roaming/nltk_data")
 
