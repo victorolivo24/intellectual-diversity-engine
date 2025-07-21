@@ -11,7 +11,7 @@ export default function AnalysisComponent({ auth, onBack, onAnalysisComplete }) 
     if (!url) return setError('Enter a URL');
     setLoading(true); setError(''); setResult(null);
     try {
-      const res = await fetch('http://127.0.0.1:5000/analyze', {
+      const res = await fetch('${process.env.REACT_APP_API_URL}/analyze', {
         method:'POST', headers:{'Content-Type':'application/json','x-access-token':auth.token},
         body:JSON.stringify({url})
       });

@@ -1,8 +1,7 @@
 // Final popup.js
 
-const API_URL = 'http://127.0.0.1:5000';
-// We'll replace this with the real URL after deploying the dashboard website
-const DASHBOARD_URL = 'http://localhost:3000'; // Or whatever your local React dev server is
+const API_URL = 'https://out-of-the-loop-backend.onrender.com';
+const DASHBOARD_URL = 'https://out-of-the-loop-app.netlify.app';
 // Called by platform.js once it loads
 window.onGoogleLibraryLoad = function () {
     // render into the div that our renderLoginForm will inject

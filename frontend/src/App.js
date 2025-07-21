@@ -21,7 +21,7 @@ export default function App() {
     if (token) {
       // Case 1: A direct token from Google OAuth login
       // We need to fetch the email associated with this new token
-      fetch('http://127.0.0.1:5000/me', { headers: { 'x-access-token': token } })
+      fetch('${process.env.REACT_APP_API_URL}/me', { headers: { 'x-access-token': token } })
         .then(res => res.json())
         .then(data => {
           if (data.email) {
@@ -35,7 +35,7 @@ export default function App() {
 
     } else if (ssoTicket) {
       // Case 2: An SSO ticket from the browser extension
-      fetch('http://127.0.0.1:5000/redeem_sso_ticket', {
+      fetch('${process.env.REACT_APP_API_URL}/redeem_sso_ticket', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sso_ticket: ssoTicket })
