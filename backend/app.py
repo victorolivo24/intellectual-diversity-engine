@@ -86,7 +86,7 @@ except LookupError:
     # This is now just a fallback, the build script should handle it.
     print("Stopwords not found locally, attempting emergency download...")
     nltk.download("stopwords", download_dir=NLTK_DATA_DIR)
-    
+
 # buld stopwords set
 stop_words = set(stopwords.words("english"))
 custom_stopwords = {
@@ -626,6 +626,12 @@ def redeem_sso_ticket():
     })
 
 # Authentication Routes
+
+
+@app.route("/")
+def index():
+    """A simple health check endpoint."""
+    return jsonify({"status": "ok", "message": "Backend is running."})
 
 
 @app.route("/me", methods=["GET"])
