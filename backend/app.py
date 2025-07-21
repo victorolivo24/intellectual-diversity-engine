@@ -37,23 +37,18 @@ from sentry_sdk.integrations.flask import FlaskIntegration
 from config import config_by_name
 from flask_migrate import Migrate
 
-NLTK_DATA_DIR = os.path.join(os.path.dirname(__file__), "nltk_data")
-nltk.data.path.append(NLTK_DATA_DIR)
+
 # initialize Flask app with database
 load_dotenv()
 app = Flask(__name__)
 CORS(app)
+
+NLTK_DATA_DIR = os.path.join(os.path.dirname(__file__), "nltk_data")
+nltk.data.path.append(NLTK_DATA_DIR)
 # Get the environment from the FLASK_ENV variable (defaults to 'dev')
 config_name = os.getenv("FLASK_ENV", "dev")
 # Load the configuration object from the config.py file
 app.config.from_object(config_by_name[config_name])
-# just for local testing, remove for production
-os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-
-app.config["GOOGLE_CLIENT_ID"] = os.getenv("GOOGLE_CLIENT_ID")
-app.config["GOOGLE_CLIENT_SECRET"] = os.getenv("GOOGLE_CLIENT_SECRET")
-app.config["GOOGLE_REDIRECT_URI"] = "http://127.0.0.1:5000/auth/google/callback"
-app.config["SENTRY_DSN"] = os.getenv("SENTRY_DSN")
 
 if app.config["SENTRY_DSN"]:
     sentry_sdk.init(
@@ -66,7 +61,7 @@ if app.config["SENTRY_DSN"]:
         traces_sample_rate=1.0,
     )
     print("Sentry error monitoring initialized for the backend.")
-
+    
 db = SQLAlchemy(app)
 # connect migration engine
 migrate = Migrate(app, db)
