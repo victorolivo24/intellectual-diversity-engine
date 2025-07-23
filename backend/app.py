@@ -21,14 +21,13 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import secrets
 import threading
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 import nltk
 from nltk.corpus import stopwords
 import re
 from collections import Counter
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
-from transformers import pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import threading
@@ -376,13 +375,22 @@ def get_sentiment_pipeline():
             print(
                 "--- First request: Loading custom sentiment model... ---", flush=True
             )
-            model_path = os.path.abspath("./out-of-the-loop-production-model")
 
+            # Robust absolute model path
+            basedir = os.path.abspath(os.path.dirname(__file__))
+            model_path = os.path.join(basedir, "out-of-the-loop-production-model")
+
+            print(f"--- Attempting to load model from: {model_path} ---", flush=True)
+
+            # Explicit loading with local_files_only here (safe)
+            model = AutoModelForSequenceClassification.from_pretrained(
+                model_path, local_files_only=True
+            )
+            tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
+
+            # Create the pipeline without passing local_files_only again
             sentiment_pipeline = pipeline(
-                "sentiment-analysis",
-                model=model_path,
-                tokenizer=model_path,
-                local_files_only=True,
+                "sentiment-analysis", model=model, tokenizer=tokenizer
             )
 
             print("--- Sentiment model loaded successfully. ---", flush=True)
