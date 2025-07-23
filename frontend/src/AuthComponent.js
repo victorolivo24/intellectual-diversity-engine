@@ -43,7 +43,7 @@ export default function AuthComponent({ onAuth }) {
         <button type="submit" style={styles.button}>{mode==='login' ? 'Login' : 'Sign Up'}</button>
       </form>
       <div style={{ textAlign: 'center', margin: '15px 0', color: '#666', fontWeight: 'bold' }}>OR</div>
-      <a href="http://127.0.0.1:5000/login/google?state=dashboard" className="google-btn">
+      <a href={`${process.env.REACT_APP_API_URL}/login/google?state=dashboard`} className="google-btn">
         <div className="google-icon-wrapper">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 48 48">
             <g>

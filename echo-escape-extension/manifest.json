@@ -9,7 +9,7 @@
     "scripting"
   ],
   "host_permissions": [
-    "http://127.0.0.1:5000/*"
+    "<all_urls>"
   ],
   "icons": {
     "16": "icon16.png",
