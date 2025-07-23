@@ -40,7 +40,7 @@ from flask_migrate import Migrate
 # initialize Flask app with database
 load_dotenv()
 app = Flask(__name__)
-# Replace the old CORS(app) line with this
+# CHANGE ONCE EXTENSION IS ON GOOGLE STORE
 CORS(
     app,
     resources={
@@ -48,6 +48,7 @@ CORS(
             "origins": [
                 "https://out-of-the-loop.netlify.app",
                 "https://outoftheloop.duckdns.org",
+                "chrome-extension://meagfogmfpihfoonefiokmeidplpleeb",
             ]
         }
     },
