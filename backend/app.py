@@ -40,8 +40,8 @@ from flask_migrate import Migrate
 # initialize Flask app with database
 load_dotenv()
 app = Flask(__name__)
-CORS(app)
-
+# Replace the old CORS(app) line with this
+CORS(app, resources={r"/*": {"origins": "https://out-of-the-loop.netlify.app"}})
 NLTK_DATA_DIR = os.path.join(os.path.dirname(__file__), "nltk_data")
 nltk.data.path.append(NLTK_DATA_DIR)
 # Get the environment from the FLASK_ENV variable (defaults to 'dev')
