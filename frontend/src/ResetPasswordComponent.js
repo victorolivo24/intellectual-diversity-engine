@@ -25,7 +25,7 @@ export default function ResetPasswordComponent({ onLoginNavigate }) {
         setError('');
         setMessage('');
         try {
-            const res = await fetch('${process.env.REACT_APP_API_URL}/request-password-reset', {
+            const res = await fetch(`${process.env.REACT_APP_API_URL}/request-password-reset`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username }),
@@ -47,7 +47,7 @@ export default function ResetPasswordComponent({ onLoginNavigate }) {
         setError('');
         setMessage('');
         try {
-            const res = await fetch('${process.env.REACT_APP_API_URL}/perform-password-reset', {
+            const res = await fetch(`${process.env.REACT_APP_API_URL}/perform-password-reset`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token, new_password: password }),

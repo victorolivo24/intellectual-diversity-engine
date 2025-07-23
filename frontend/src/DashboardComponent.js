@@ -26,7 +26,7 @@ export default function DashboardComponent({ auth, setAuth, key }) {
   useEffect(() => {
     const fetchTopics = async () => {
       try {
-        const res = await fetch('${process.env.REACT_APP_API_URL}/topics', {
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/topics`, {
           headers: { 'x-access-token': auth.token }
         });
         const data = await res.json();
@@ -41,10 +41,10 @@ export default function DashboardComponent({ auth, setAuth, key }) {
     setState(s => ({ ...s, loading: true }));
     try {
       const [articlesRes, topicsRes, sourcesRes, timelineRes] = await Promise.all([
-        fetch('${process.env.REACT_APP_API_URL}/dashboard', { headers: { 'x-access-token': auth.token } }),
-        fetch('${process.env.REACT_APP_API_URL}/category_analysis', { headers: { 'x-access-token': auth.token } }),
-        fetch('${process.env.REACT_APP_API_URL}/source_analysis', { headers: { 'x-access-token': auth.token } }),
-        fetch('${process.env.REACT_APP_API_URL}/sentiment_timeline', { headers: { 'x-access-token': auth.token } })
+        fetch(`${process.env.REACT_APP_API_URL}/dashboard`, { headers: { 'x-access-token': auth.token } }),
+        fetch(`${process.env.REACT_APP_API_URL}/category_analysis`, { headers: { 'x-access-token': auth.token } }),
+        fetch(`${ process.env.REACT_APP_API_URL } / source_analysis`, { headers: { 'x-access-token': auth.token } }),
+        fetch(`${process.env.REACT_APP_API_URL}/sentiment_timeline`, { headers: { 'x-access-token': auth.token } })
       ]);
       if (!articlesRes.ok || !topicsRes.ok || !sourcesRes.ok || !timelineRes.ok)
         throw new Error("Could not fetch all dashboard data.");
@@ -68,7 +68,7 @@ export default function DashboardComponent({ auth, setAuth, key }) {
 
   const handleMoveArticle = async (articleId, newCategory) => {
     try {
-      const res = await fetch('${process.env.REACT_APP_API_URL}/move_article', {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/move_article`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -96,7 +96,7 @@ export default function DashboardComponent({ auth, setAuth, key }) {
     }
 
     try {
-      const res = await fetch('${process.env.REACT_APP_API_URL}/account/delete', {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/account/delete`, {
         method: 'DELETE',
         headers: { 'x-access-token': auth.token }
       });
@@ -192,7 +192,7 @@ export default function DashboardComponent({ auth, setAuth, key }) {
               <button
                 onClick={async () => {
                   try {
-                    const res = await fetch('${process.env.REACT_APP_API_URL}/topics', {
+                    const res = await fetch(`${process.env.REACT_APP_API_URL}/topics`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json', 'x-access-token': auth.token },
                       body: JSON.stringify({ name: newTopicName })
@@ -201,7 +201,7 @@ export default function DashboardComponent({ auth, setAuth, key }) {
                     if (!res.ok) throw new Error(await res.json().then(e => e.message));
 
                     // ✅ Re-fetch updated topics list
-                    const topicsRes = await fetch('${process.env.REACT_APP_API_URL}/topics', {
+                    const topicsRes = await fetch(`${process.env.REACT_APP_API_URL}/topics`, {
                       headers: { 'x-access-token': auth.token }
                     });
                     const topicsData = await topicsRes.json();
