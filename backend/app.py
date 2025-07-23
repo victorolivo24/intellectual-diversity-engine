@@ -679,7 +679,6 @@ def register():
 
     print("11 - Success")
     return jsonify({"message": "User registered successfully"}), 201
-g
 
 @app.route("/login", methods=["POST"])
 def login():
