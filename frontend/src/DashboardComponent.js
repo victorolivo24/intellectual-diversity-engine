@@ -43,7 +43,7 @@ export default function DashboardComponent({ auth, setAuth, key }) {
       const [articlesRes, topicsRes, sourcesRes, timelineRes] = await Promise.all([
         fetch(`${process.env.REACT_APP_API_URL}/dashboard`, { headers: { 'x-access-token': auth.token } }),
         fetch(`${process.env.REACT_APP_API_URL}/category_analysis`, { headers: { 'x-access-token': auth.token } }),
-        fetch(`${ process.env.REACT_APP_API_URL} / source_analysis`, { headers: { 'x-access-token': auth.token } }),
+        fetch(`${ process.env.REACT_APP_API_URL}/source_analysis`, { headers: { 'x-access-token': auth.token } }),
         fetch(`${process.env.REACT_APP_API_URL}/sentiment_timeline`, { headers: { 'x-access-token': auth.token } })
       ]);
       if (!articlesRes.ok || !topicsRes.ok || !sourcesRes.ok || !timelineRes.ok)
