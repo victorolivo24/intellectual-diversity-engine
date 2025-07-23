@@ -246,6 +246,7 @@ def extract_article_text(soup, url=None):
         "article",
         "[role='main']",
         "#main",
+        "div.article-body",
         "#main-content",
         ".main-content",
         ".article-content",
