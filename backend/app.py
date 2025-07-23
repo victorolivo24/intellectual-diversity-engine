@@ -101,7 +101,7 @@ custom_stopwords = {
     "like",
     "get",
     "going",
-    "advertisement"
+    "advertisement",
 }
 stop_words.update(custom_stopwords)
 
@@ -112,6 +112,7 @@ reading_list = db.Table(
     db.Column("user_id", db.Integer, db.ForeignKey("user.id"), primary_key=True),
     db.Column("article_id", db.Integer, db.ForeignKey("article.id"), primary_key=True),
 )
+
 
 # user model
 class User(db.Model):
@@ -144,13 +145,12 @@ class Article(db.Model):
     title = db.Column(db.String(500), nullable=False)
     article_text = db.Column(db.Text, nullable=False)
     # time stamp for when article was added
-    retrieved_at = db.Column(
-        db.DateTime, nullable=False, default=dt.datetime.utcnow
-    )  
+    retrieved_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
     # store results of analysis
     sentiment_score = db.Column(db.Float, nullable=True)
     keywords = db.Column(db.JSON, nullable=True)
     category = db.Column(db.String(50), nullable=True)
+
 
 # temporary single-use tickets for secure login flow
 class SsoTicket(db.Model):
@@ -253,6 +253,7 @@ def extract_article_text(soup, url=None):
             text = element.get_text(separator="\n", strip=True)
             if len(text) > 250:
                 return text
+
     # helper function to score divs to find most likely article text
     def score_candidate(tag):
         text = tag.get_text(separator="\n", strip=True)
@@ -296,6 +297,7 @@ def extract_article_text(soup, url=None):
 
     # can't find container for text body, return all text
     return soup.get_text(separator="\n", strip=True)
+
 
 import re
 
@@ -367,18 +369,24 @@ def clean_article_text(text):
 
 # load large AI model into memory efficiently (lazy loading)
 def get_sentiment_pipeline():
+    """Initializes and returns the sentiment analysis pipeline using a thread-safe lock."""
     global sentiment_pipeline
-    # load requests one at a time to prevent race condition
     with pipeline_lock:
-        # load model for first time
         if sentiment_pipeline is None:
             print(
                 "--- First request: Loading custom sentiment model... ---", flush=True
             )
             model_path = "./out-of-the-loop-production-model"
+
+            # --- THIS IS THE CORRECTED PART ---
             sentiment_pipeline = pipeline(
-                "sentiment-analysis", model=model_path, tokenizer=model_path
+                "sentiment-analysis",
+                model=model_path,
+                tokenizer=model_path,
+                local_files_only=True,  # Force it to use the local folder
             )
+            # ------------------------------------
+
             print("--- Sentiment model loaded successfully. ---", flush=True)
     return sentiment_pipeline
 
@@ -395,6 +403,7 @@ def extract_keywords(text, max_keywords=7):
     keyword_counts = Counter(words)
     # return most frequent words sorted from most to least frequent counts
     return [word for word, _ in keyword_counts.most_common(max_keywords)]
+
 
 # Category Texts with buzzwords for Cosine Similarity
 CATEGORY_TEXTS = {
@@ -559,51 +568,53 @@ def save_analysis(current_user):
 
 
 # Single Sign-On (SSO) Routes
-@app.route('/generate_sso_ticket', methods=['POST'])
+@app.route("/generate_sso_ticket", methods=["POST"])
 @token_required
 def generate_sso_ticket(current_user):
     """Generates a secure, single-use ticket for a logged-in user."""
     ticket_string = secrets.token_urlsafe(32)
     # Use utcnow() to create a naive datetime object in UTC
     expiration = dt.datetime.utcnow() + dt.timedelta(seconds=60)
-    
+
     new_ticket = SsoTicket(
-        ticket=ticket_string,
-        user_id=current_user.id,
-        expires_at=expiration
+        ticket=ticket_string, user_id=current_user.id, expires_at=expiration
     )
     db.session.add(new_ticket)
     db.session.commit()
-    
-    return jsonify({'sso_ticket': ticket_string})
+
+    return jsonify({"sso_ticket": ticket_string})
 
 
-@app.route('/redeem_sso_ticket', methods=['POST'])
+@app.route("/redeem_sso_ticket", methods=["POST"])
 def redeem_sso_ticket():
     """Redeems a single-use ticket and returns a full JWT session token."""
     data = request.get_json()
-    ticket_string = data.get('sso_ticket')
+    ticket_string = data.get("sso_ticket")
 
     if not ticket_string:
-        return jsonify({'message': 'Ticket is missing'}), 400
+        return jsonify({"message": "Ticket is missing"}), 400
 
     sso_ticket = SsoTicket.query.filter_by(ticket=ticket_string).first()
 
     # Use utcnow() for simple, naive UTC datetime comparison
-    if not sso_ticket or sso_ticket.is_used or sso_ticket.expires_at < dt.datetime.utcnow():
-        return jsonify({'message': 'Invalid or expired ticket'}), 401
+    if (
+        not sso_ticket
+        or sso_ticket.is_used
+        or sso_ticket.expires_at < dt.datetime.utcnow()
+    ):
+        return jsonify({"message": "Invalid or expired ticket"}), 401
 
     # Mark ticket as used
     sso_ticket.is_used = True
 
     # Use the modern db.session.get() to avoid the legacy warning
-    user = db.session.get(User, sso_ticket.user_id) 
+    user = db.session.get(User, sso_ticket.user_id)
 
     # generate short-lived JWT (30 min)
     token = jwt.encode(
         {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
-        app.config['SECRET_KEY'],
-        "HS256"
+        app.config["SECRET_KEY"],
+        "HS256",
     )
 
     # generate a long-lived refresh token
@@ -614,11 +625,10 @@ def redeem_sso_ticket():
         f"[DEBUG] user {user.email} redeemed SSO ticket and got refresh token: {refresh_token}"
     )
 
-    return jsonify({
-        "token": token,
-        "refresh_token": refresh_token,
-        "email": user.email
-    })
+    return jsonify(
+        {"token": token, "refresh_token": refresh_token, "email": user.email}
+    )
+
 
 # Authentication Routes
 
@@ -638,6 +648,7 @@ def get_current_user(current_user):
         return jsonify({"message": "Invalid token."}), 401
 
     return jsonify({"email": current_user.email}), 200
+
 
 EMAIL_REGEX = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 
@@ -679,6 +690,7 @@ def register():
 
     print("11 - Success")
     return jsonify({"message": "User registered successfully"}), 201
+
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -896,7 +908,7 @@ def google_callback():
     # Check where the login started and redirect to the correct place
     origin = session.get("origin_state", "dashboard")
     if origin == "extension":
-        extension_id = "meagfogmfpihfoonefiokmeidplpleeb"  
+        extension_id = "meagfogmfpihfoonefiokmeidplpleeb"
         return redirect(
             f"chrome-extension://{extension_id}/oauth_callback.html?token={app_token}&email={user.email}"
         )
@@ -1075,7 +1087,7 @@ def delete_topic(current_user, topic_name):
 
 
 # 7. Main execution block
-if __name__ == '__main__':
+if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    app.run(port=5000,debug=True)
+    app.run(port=5000, debug=True)
