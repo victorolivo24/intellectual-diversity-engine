@@ -1,6 +1,7 @@
 // Final popup.js
 
-const API_URL = 'http://3.141.85.52:8000/';
+
+const API_URL = 'https://outoftheloop.duckdns.org';
 const DASHBOARD_URL = 'https://out-of-the-loop.netlify.app';
 // Called by platform.js once it loads
 window.onGoogleLibraryLoad = function () {
