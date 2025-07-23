@@ -644,9 +644,42 @@ EMAIL_REGEX = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 
 @app.route("/register", methods=["POST"])
 def register():
-    print("Register endpoint hit")
-    return jsonify({"message": "Register OK"}), 200
+    print("1 - Route hit")
+    data = request.get_json()
+    print("2 - Parsed data")
 
+    email = data.get("email")
+    password = data.get("password")
+
+    if not email or not password:
+        print("3 - Missing fields")
+        return jsonify({"message": "Email and password are required"}), 400
+
+    if not re.match(EMAIL_REGEX, email):
+        print("4 - Invalid format")
+        return jsonify({"message": "Invalid email format"}), 400
+
+    print("5 - Passed validation")
+
+    if User.query.filter_by(email=email).first():
+        print("6 - Email already exists")
+        return jsonify({"message": "An account with this email already exists"}), 409
+
+    print("7 - Creating user object")
+    user = User(email=email)
+
+    print("8 - Setting password")
+    user.set_password(password)
+
+    print("9 - Adding to DB")
+    db.session.add(user)
+
+    print("10 - Committing to DB")
+    db.session.commit()
+
+    print("11 - Success")
+    return jsonify({"message": "User registered successfully"}), 201
+g
 
 @app.route("/login", methods=["POST"])
 def login():
