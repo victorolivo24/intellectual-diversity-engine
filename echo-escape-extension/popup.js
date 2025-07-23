@@ -1,7 +1,7 @@
 // Final popup.js
 
 const API_URL = 'http://3.141.85.52:8000/';
-const DASHBOARD_URL = 'https://out-of-the-loop-app.netlify.app';
+const DASHBOARD_URL = 'https://out-of-the-loop.netlify.app';
 // Called by platform.js once it loads
 window.onGoogleLibraryLoad = function () {
     // render into the div that our renderLoginForm will inject
