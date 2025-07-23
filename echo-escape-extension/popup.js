@@ -91,7 +91,7 @@ function renderResults(container, analysisData) {
     container.innerHTML = `
         <div class="results-view">
             <h4>Analysis Complete</h4>
-            <p style="font-size: 12px; color: #666; text-align: center; margin-top: -5px; margin-bottom: 10px;">
+            <p style="font-size: 12px; color: #B0B3B8; text-align: center; margin-top: -5px; margin-bottom: 10px;">
                 Score is rated from -1.0 (Negative) to 1.0 (Positive).
             </p>
             <div class="result-item">
