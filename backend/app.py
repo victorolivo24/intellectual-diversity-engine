@@ -61,7 +61,7 @@ if app.config["SENTRY_DSN"]:
         traces_sample_rate=1.0,
     )
     print("Sentry error monitoring initialized for the backend.")
-    
+
 db = SQLAlchemy(app)
 # connect migration engine
 migrate = Migrate(app, db)
@@ -644,26 +644,8 @@ EMAIL_REGEX = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 
 @app.route("/register", methods=["POST"])
 def register():
-    data = request.get_json()
-    email = data.get("email")
-    password = data.get("password")
-
- 
-    if not email or not password:
-        return jsonify({"message": "Email and password are required"}), 400
-
-    # Check if email format is valid
-    if not re.match(EMAIL_REGEX, email):
-        return jsonify({"message": "Invalid email format"}), 400
-
-    if User.query.filter_by(email=email).first():
-        return jsonify({"message": "An account with this email already exists"}), 409
-
-    user = User(email=email)
-    user.set_password(password)
-    db.session.add(user)
-    db.session.commit()
-    return jsonify({"message": "User registered successfully"}), 201
+    print("Register endpoint hit")
+    return jsonify({"message": "Register OK"}), 200
 
 
 @app.route("/login", methods=["POST"])
