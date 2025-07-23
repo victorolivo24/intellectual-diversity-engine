@@ -376,16 +376,14 @@ def get_sentiment_pipeline():
             print(
                 "--- First request: Loading custom sentiment model... ---", flush=True
             )
-            model_path = "./out-of-the-loop-production-model"
+            model_path = os.path.abspath("./out-of-the-loop-production-model")
 
-            # --- THIS IS THE CORRECTED PART ---
             sentiment_pipeline = pipeline(
                 "sentiment-analysis",
                 model=model_path,
                 tokenizer=model_path,
-                local_files_only=True,  # Force it to use the local folder
+                local_files_only=True,
             )
-            # ------------------------------------
 
             print("--- Sentiment model loaded successfully. ---", flush=True)
     return sentiment_pipeline
