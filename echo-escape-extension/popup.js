@@ -1,6 +1,6 @@
 // Final popup.js
 
-const API_URL = 'https://out-of-the-loop-backend.onrender.com';
+const API_URL = 'http://3.141.85.52:8000/';
 const DASHBOARD_URL = 'https://out-of-the-loop-app.netlify.app';
 // Called by platform.js once it loads
 window.onGoogleLibraryLoad = function () {
