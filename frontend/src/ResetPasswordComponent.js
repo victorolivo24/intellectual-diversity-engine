@@ -82,9 +82,9 @@ export default function ResetPasswordComponent({ onLoginNavigate }) {
     return (
         <div style={styles.card}>
             <h2>Forgot Password</h2>
-            <p style={{ textAlign: 'center', color: '#666', fontSize: '14px' }}>Enter your username to receive a password reset link.</p>
+            <p style={{ textAlign: 'center', color: '#666', fontSize: '14px' }}>Enter your email to receive a password reset link.</p>
             <form onSubmit={handleRequestReset} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <input placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} required style={styles.input} />
+                <input placeholder="Email" value={username} onChange={e => setUsername(e.target.value)} required style={styles.input} />
                 {error && <div style={styles.errorText}>{error}</div>}
                 {message && <div style={{ color: 'green', textAlign: 'center' }}>{message}</div>}
                 <button type="submit" style={styles.button}>Request Reset Link</button>
