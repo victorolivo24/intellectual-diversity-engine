@@ -346,7 +346,11 @@ function handleAnalysis() {
             fetch(`${API_URL}/analyze`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-access-token': result.token },
-                body: JSON.stringify({ html_content: pageHtml })
+                body: JSON.stringify({
+                    html_content: response.page_html,
+                    visible_text: response.page_text  
+                })
+
             })
                 .then(async res => {
                     const text = await res.text();  // always read raw text

@@ -4,7 +4,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
         const selectors = [
             'article',
-            '[data-qa="story-body"]',              
+            '[data-qa="story-body"]',
             '[itemprop="articleBody"]',
             'main',
             '[class*="article-content"]',
@@ -19,7 +19,6 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             }
         }
 
-        // Fallback: if nothing matched, use body text
         if (!articleText) {
             const fallback = document.body.innerText.trim();
             if (fallback.length > 100) {
@@ -27,8 +26,11 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
             }
         }
 
-        console.log("📄 Extracted text:", articleText.slice(0, 200));  // Optional for debugging
-        sendResponse({ page_html: articleText });
+        // Send both the visible text and full HTML (for metadata)
+        sendResponse({
+            page_text: articleText,
+            page_html: document.documentElement.outerHTML
+        });
     }
 
     return true;

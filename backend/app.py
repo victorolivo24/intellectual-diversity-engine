@@ -37,6 +37,7 @@ from config import config_by_name
 from flask_migrate import Migrate
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
+import traceback
 
 # initialize Flask app with database
 load_dotenv()
@@ -504,9 +505,13 @@ def analyze(current_user):
     
 
     try:
+        data = request.get_json()
+        html_content = data.get("html_content", "")
+        visible_text = data.get("visible_text", "")
+
+        # Parse the HTML for title and URL
         soup = BeautifulSoup(html_content, "html.parser")
 
-        # We still need the URL to check for existing articles later
         url_element = soup.find("link", rel="canonical")
         url = url_element["href"] if url_element else "Unknown URL"
 
@@ -515,35 +520,34 @@ def analyze(current_user):
             if soup.find("title")
             else "No Title"
         )
-        text = extract_article_text(soup)
-        
+
+        # Use the plain extracted text for analysis
+        text = visible_text or extract_article_text(soup)
+
         if not text or len(text.strip()) < 100:
+            print("⚠️ No usable article text extracted.")
+            print(html_content[:500])  # Preview for debug
             return jsonify({
                 "message": "Failed to extract article content. The page may be protected or rendered with JavaScript.",
                 "data": None
             }), 400
 
-
         # Perform the analysis but do NOT save to the database yet
         sentiment, keywords, category = get_local_analysis(text)
 
-        # Return the unsaved analysis data to the extension
-        return jsonify(
-            {
-                "message": "Analysis complete",
-                "data": {
-                    "url": url,  # Pass the URL along
-                    "title": title,
-                    "sentiment": sentiment,
-                    "keywords": keywords,
-                    "category": category,
-                    "article_text": text,
-                },
-            }
-        )
-    except Exception as e:
-        import traceback
+        return jsonify({
+            "message": "Analysis complete",
+            "data": {
+                "url": url,
+                "title": title,
+                "sentiment": sentiment,
+                "keywords": keywords,
+                "category": category,
+                "article_text": text,
+            },
+        })
 
+    except Exception as e:
         print(f"--- EXCEPTION IN /analyze: {e} ---", flush=True)
         traceback.print_exc()
         db.session.rollback()
