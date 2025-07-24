@@ -502,9 +502,7 @@ def analyze(current_user):
     if not html_content:
         return jsonify({"message": "HTML content is required"}), 400
     
-    if html_content.strip().startswith("<!DOCTYPE") or "<html" in html_content.lower():
-        print("⚠️ Warning: Received full HTML instead of text.")
-        print(html_content[:500])  # Print a preview
+
     try:
         soup = BeautifulSoup(html_content, "html.parser")
 
@@ -518,17 +516,13 @@ def analyze(current_user):
             else "No Title"
         )
         text = extract_article_text(soup)
-
+        
         if not text or len(text.strip()) < 100:
-            return (
-                jsonify(
-                    {
-                        "message": "Article content was unavailable or too short.",
-                        "data": None,
-                    }
-                ),
-                200,
-            )
+            return jsonify({
+                "message": "Failed to extract article content. The page may be protected or rendered with JavaScript.",
+                "data": None
+            }), 400
+
 
         # Perform the analysis but do NOT save to the database yet
         sentiment, keywords, category = get_local_analysis(text)
