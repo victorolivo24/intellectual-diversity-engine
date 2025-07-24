@@ -87,10 +87,16 @@ function renderAnalysisView(container, email) {
 
 
 function renderResults(container, analysisData) {
+    // Sanitize title to prevent HTML injection issues
+    const safeTitle = analysisData.title.replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const keywordsHtml = analysisData.keywords.map(kw => `<li class="keyword-pill">${kw}</li>`).join('');
     container.innerHTML = `
         <div class="results-view">
-            <h4>Analysis Complete</h4>
+            <h3>Analysis Complete</h3>
+            <div class="article-header">
+                <h4 class="article-title">${safeTitle}</h4>
+                <p class="article-publisher">${analysisData.publisher || ''}</p>
+            </div>
             <p style="font-size: 12px; color: #B0B3B8; text-align: center; margin-top: -5px; margin-bottom: 10px;">
                 Score is rated from -1.0 (Negative) to 1.0 (Positive).
             </p>
