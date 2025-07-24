@@ -348,10 +348,24 @@ function handleAnalysis() {
                 headers: { 'Content-Type': 'application/json', 'x-access-token': result.token },
                 body: JSON.stringify({ html_content: pageHtml })
             })
-                .then(res => {
-                    if (!res.ok) return res.json().then(err => { throw new Error(err.message) });
-                    return res.json();
+                .then(async res => {
+                    const text = await res.text();  // always read raw text
+
+                    try {
+                        const json = JSON.parse(text);
+
+                        if (!res.ok) {
+                            throw new Error(json.message || 'Unexpected server error.');
+                        }
+
+                        return json;
+                    } catch (err) {
+                        console.error("❌ Failed to parse JSON. Raw response was:");
+                        console.error(text);  // This will show the "<!DOCTYPE..." if it failed
+                        throw new Error("Server returned invalid JSON. Site may be blocking content.");
+                    }
                 })
+
                 .then(data => {
                     if (data.data) {
                         // On success, call the new renderResults function
