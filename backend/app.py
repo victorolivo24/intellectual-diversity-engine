@@ -501,7 +501,10 @@ def analyze(current_user):
     html_content = request.get_json().get("html_content")
     if not html_content:
         return jsonify({"message": "HTML content is required"}), 400
-
+    
+    if html_content.strip().startswith("<!DOCTYPE") or "<html" in html_content.lower():
+        print("⚠️ Warning: Received full HTML instead of text.")
+        print(html_content[:500])  # Print a preview
     try:
         soup = BeautifulSoup(html_content, "html.parser")
 
