@@ -35,7 +35,8 @@ import sentry_sdk
 from sentry_sdk.integrations.flask import FlaskIntegration
 from config import config_by_name
 from flask_migrate import Migrate
-
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
 # initialize Flask app with database
 load_dotenv()
@@ -807,13 +808,24 @@ def request_password_reset():
         db.session.add(reset_token)
         db.session.commit()
 
-        # For development, we print the link instead of emailing it.
-        # In production, you would use a service like SendGrid or Mailgun here.
-        reset_link = f"http://localhost:3000/reset-password/{token}"
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        print(f"--- PASSWORD RESET LINK (for user: {user.email}): {reset_link} ---")
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    reset_link = f"https://out-of-the-loop.netlify.app/reset-password/{token}"
+    message = Mail(
+        from_email="outoftheloop.company@gmail.com",
+        to_emails=user.email,
+        subject="Reset your Out of the Loop password",
+        html_content=f"""
+            <p>Hello,</p>
+            <p>Click the link below to reset your password. This link is valid for 1 hour:</p>
+            <a href="{reset_link}">Reset Password</a>
+            <p>If you didn't request this, you can safely ignore it.</p>
+        """,
+    )
 
+    try:
+        sg = SendGridAPIClient(os.environ.get("SENDGRID_API_KEY"))
+        response = sg.send(message)
+    except Exception as e:
+        print(f"Failed to send email: {e}")
     # Always return a generic success message to prevent user enumeration.
     # We don't want to confirm whether an email/email exists in our system.
     return (
@@ -938,7 +950,9 @@ def google_callback():
             f"chrome-extension://{extension_id}/oauth_callback.html?token={app_token}&email={user.email}"
         )
     else:  # Default to dashboard
-        return redirect(f"http://localhost:3000?token={app_token}&email={user.email}")
+        return redirect(
+            f"https://out-of-the-loop.netlify.app?token={app_token}&email={user.email}"
+        )
 
 
 # Dashboard Data Endpoints
