@@ -786,56 +786,53 @@ def refresh_token():
     return jsonify({"token": token})
 
 
-@app.route("/request-password-reset", methods=["POST"])
-def request_password_reset():
-    """
-    Handles the initial password reset request from a user.
-    """
-    data = request.get_json()
-    email = data.get("email")
-    user = User.query.filter_by(email=email).first()
-
-    if user:
-        # Generate a secure, URL-safe token
-        token = secrets.token_urlsafe(32)
-        # Set an expiration time (e.g., 1 hour from now)
-        expiration = dt.datetime.utcnow() + dt.timedelta(hours=1)
-
-        # Create and save the reset token record
-        reset_token = PasswordResetToken(
-            user_id=user.id, token=token, expires_at=expiration
-        )
-        db.session.add(reset_token)
-        db.session.commit()
-
-    reset_link = f"https://out-of-the-loop.netlify.app/reset-password/{token}"
+def send_email(to_email, subject, html_content):
     message = Mail(
-        from_email="outoftheloop.company@gmail.com",
-        to_emails=user.email,
-        subject="Reset your Out of the Loop password",
-        html_content=f"""
-            <p>Hello,</p>
-            <p>Click the link below to reset your password. This link is valid for 1 hour:</p>
-            <a href="{reset_link}">Reset Password</a>
-            <p>If you didn't request this, you can safely ignore it.</p>
-        """,
+        from_email=os.environ.get("FROM_EMAIL"),
+        to_emails=to_email,
+        subject=subject,
+        html_content=html_content,
     )
 
     try:
         sg = SendGridAPIClient(os.environ.get("SENDGRID_API_KEY"))
         response = sg.send(message)
+        print(f"Email sent to {to_email} - Status: {response.status_code}")
     except Exception as e:
-        print(f"Failed to send email: {e}")
-    # Always return a generic success message to prevent user enumeration.
-    # We don't want to confirm whether an email/email exists in our system.
-    return (
-        jsonify(
-            {
-                "message": "If an account with that email exists, a password reset link has been sent."
-            }
-        ),
-        200,
-    )
+        print(f"Error sending email: {e}")
+
+
+@app.route("/request-password-reset", methods=["POST"])
+def request_password_reset():
+    data = request.get_json()
+    email = data.get("email")
+
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"message": "No user found with that email"}), 404
+
+    try:
+        token = user.get_reset_token()
+    except Exception as e:
+        print(f"Error generating reset token: {e}")
+        return jsonify({"error": "Failed to generate reset token"}), 500
+
+    reset_link = f"https://out-of-the-loop.netlify.app/reset-password/{token}"
+
+    try:
+        send_email(
+            to=email,
+            subject="Reset your password",
+            html_content=f"<p>Click the link below to reset your password:</p><a href='{reset_link}'>{reset_link}</a>",
+        )
+    except Exception as e:
+        print(f"Error sending reset email: {e}")
+        return jsonify({"error": "Failed to send reset email"}), 500
+
+    return jsonify({"message": "Password reset link sent"}), 200
 
 
 @app.route("/perform-password-reset", methods=["POST"])
