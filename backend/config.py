@@ -26,20 +26,17 @@ class DevelopmentConfig(Config):
         "DEV_DATABASE_URL", "sqlite:///" + os.path.join(basedir, "instance", "dev.db")
     )
 
-    # This setting is specific to local development
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-    GOOGLE_REDIRECT_URI = "http://127.0.0.1:5000/auth/google/callback"
+    GOOGLE_REDIRECT_URI = os.getenv(
+        "GOOGLE_REDIRECT_URI", "http://127.0.0.1:5000/auth/google/callback"
+    )
 
 
 class ProductionConfig(Config):
     """Production configuration."""
 
     DEBUG = False
-    # In production, you will set this DATABASE_URL on your hosting provider
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
-    # In production, you will update this on your Google Cloud Console
-    GOOGLE_REDIRECT_URI = "https://your-live-app-url.com/auth/google/callback"
-
-
-# A dictionary to easily access the config classes
-config_by_name = dict(dev=DevelopmentConfig, prod=ProductionConfig)
+    GOOGLE_REDIRECT_URI = os.getenv(
+        "GOOGLE_REDIRECT_URI", "https://your-live-app-url.com/auth/google/callback"
+    )
