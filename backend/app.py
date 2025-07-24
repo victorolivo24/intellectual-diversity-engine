@@ -879,6 +879,8 @@ def google_login():
     """
     Redirects the user to Google's authentication page, remembering the origin.
     """
+    print("Redirecting to Google with redirect_uri:", app.config["GOOGLE_REDIRECT_URI"])
+
     # Get the origin ('dashboard' or 'extension') from the URL
     origin_state = request.args.get("state", "dashboard")  # Default to dashboard
 
