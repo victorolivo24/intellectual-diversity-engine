@@ -4,7 +4,7 @@ import styles from './styles.js'; // Assuming styles are in a shared file
 export default function ResetPasswordComponent({ onLoginNavigate }) {
     const [mode, setMode] = useState('request'); // 'request' or 'reset'
     const [token, setToken] = useState(null);
-    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [message, setMessage] = useState('');
@@ -28,7 +28,7 @@ export default function ResetPasswordComponent({ onLoginNavigate }) {
             const res = await fetch(`${process.env.REACT_APP_API_URL}/request-password-reset`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username }),
+                body: JSON.stringify({ email }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message);
@@ -84,7 +84,7 @@ export default function ResetPasswordComponent({ onLoginNavigate }) {
             <h2>Forgot Password</h2>
             <p style={{ textAlign: 'center', color: '#666', fontSize: '14px' }}>Enter your email to receive a password reset link.</p>
             <form onSubmit={handleRequestReset} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <input placeholder="Email" value={username} onChange={e => setUsername(e.target.value)} required style={styles.input} />
+                <input placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required style={styles.input} />
                 {error && <div style={styles.errorText}>{error}</div>}
                 {message && <div style={{ color: 'green', textAlign: 'center' }}>{message}</div>}
                 <button type="submit" style={styles.button}>Request Reset Link</button>

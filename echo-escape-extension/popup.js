@@ -72,9 +72,9 @@ function checkAuthState(container) {
 }
 // --- RENDER FUNCTIONS ---
 // display results and checkbox to save to dashboard
-function renderAnalysisView(container, userName) {
+function renderAnalysisView(container, email) {
     container.innerHTML = `
-        <div class="header"><span>Welcome, ${userName}!</span><a href="#" id="logout-button">Logout</a></div>
+        <div class="header"><span>Welcome, ${email}!</span><a href="#" id="logout-button">Logout</a></div>
         <p>Click to analyze the article on the current page.</p>
         <button id="analyze-button" class="button">Analyze Page</button>
         <div id="results-container" class="results-container"></div>
