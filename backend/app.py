@@ -554,7 +554,11 @@ def analyze(current_user):
         print(f"--- EXCEPTION IN /analyze: {e} ---", flush=True)
         traceback.print_exc()
         db.session.rollback()
-        return jsonify({"message": "A server error occurred during analysis."}), 500
+
+        return jsonify({
+            "message": "A server error occurred during analysis.",
+            "details": str(e)
+        }), 500
 
 
 @app.route("/save_analysis", methods=["POST"])
