@@ -504,41 +504,32 @@ def analyze(current_user):
         return jsonify({"message": "HTML content is required"}), 400
 
     try:
-        print("📥 Received analyze request")
-
         data = request.get_json()
-        print("✅ JSON parsed")
-
         html_content = data.get("html_content", "")
         visible_text = data.get("visible_text", "")
-        print("✅ Extracted html_content and visible_text")
 
+        print("📥 Received analyze request")
         soup = BeautifulSoup(html_content, "html.parser")
-        print("✅ Parsed soup")
 
         text = visible_text or extract_article_text(soup)
-        print(f"✅ Extracted text: {text[:100]}")
+        print(f"✅ Text: {text[:80]}")
 
-        title = (
-            soup.find("title").get_text(strip=True)
-            if soup.find("title")
-            else text.split("\n")[0][:80]
-        )
-        print(f"✅ Title: {title}")
+        title_tag = soup.find("title")
+        if title_tag and title_tag.get_text(strip=True):
+            title = title_tag.get_text(strip=True)
+        else:
+            title = text.split("\n")[0][:80] if text else "No Title"
 
         url_element = soup.find("link", rel="canonical")
         url = url_element["href"] if url_element else "Unknown URL"
-        print(f"✅ URL: {url}")
 
         if not text or len(text.strip()) < 100:
-            print("⚠️ Article text too short")
             return jsonify({
-                "message": "Failed to extract article content.",
+                "message": "Failed to extract article content. The page may be protected or rendered with JavaScript.",
                 "data": None
             }), 400
 
         sentiment, keywords, category = get_local_analysis(text)
-        print("✅ Completed analysis")
 
         return jsonify({
             "message": "Analysis complete",
@@ -552,16 +543,15 @@ def analyze(current_user):
             }
         })
 
-
     except Exception as e:
-        print(f"--- EXCEPTION IN /analyze: {e} ---", flush=True)
+        import traceback
+        print("❌ UNHANDLED EXCEPTION IN /analyze:", e)
         traceback.print_exc()
-        db.session.rollback()
-
         return jsonify({
             "message": "A server error occurred during analysis.",
             "details": str(e)
         }), 500
+
 
 
 @app.route("/save_analysis", methods=["POST"])
