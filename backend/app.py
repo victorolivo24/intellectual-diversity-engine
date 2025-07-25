@@ -504,37 +504,41 @@ def analyze(current_user):
         return jsonify({"message": "HTML content is required"}), 400
 
     try:
+        print("📥 Received analyze request")
+
         data = request.get_json()
+        print("✅ JSON parsed")
+
         html_content = data.get("html_content", "")
         visible_text = data.get("visible_text", "")
+        print("✅ Extracted html_content and visible_text")
 
-        # Parse the HTML for title and URL
-        print("----- HTML HEAD PREVIEW -----")
-        head = html_content.split("</head>")[0]
-        print(head[:500])
         soup = BeautifulSoup(html_content, "html.parser")
+        print("✅ Parsed soup")
 
-        url_element = soup.find("link", rel="canonical")
-        url = url_element["href"] if url_element else "Unknown URL"
-        # Use the plain extracted text for analysis
         text = visible_text or extract_article_text(soup)
-        
+        print(f"✅ Extracted text: {text[:100]}")
+
         title = (
             soup.find("title").get_text(strip=True)
             if soup.find("title")
-            else text.split("\n")[0][:80]  # fallback to text if needed
+            else text.split("\n")[0][:80]
         )
+        print(f"✅ Title: {title}")
+
+        url_element = soup.find("link", rel="canonical")
+        url = url_element["href"] if url_element else "Unknown URL"
+        print(f"✅ URL: {url}")
 
         if not text or len(text.strip()) < 100:
-            print("⚠️ No usable article text extracted.")
-            print(html_content[:500])  # Preview for debug
+            print("⚠️ Article text too short")
             return jsonify({
-                "message": "Failed to extract article content. The page may be protected or rendered with JavaScript.",
+                "message": "Failed to extract article content.",
                 "data": None
             }), 400
 
-        # Perform the analysis but do NOT save to the database yet
         sentiment, keywords, category = get_local_analysis(text)
+        print("✅ Completed analysis")
 
         return jsonify({
             "message": "Analysis complete",
@@ -545,8 +549,9 @@ def analyze(current_user):
                 "keywords": keywords,
                 "category": category,
                 "article_text": text,
-            },
+            }
         })
+
 
     except Exception as e:
         print(f"--- EXCEPTION IN /analyze: {e} ---", flush=True)
