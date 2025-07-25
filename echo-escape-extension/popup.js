@@ -342,6 +342,9 @@ function handleAnalysis() {
                 resultsContainer.innerHTML = '<div class="error-message">Error: Not logged in.</div>';
                 return;
             }
+            console.log("Sending to /analyze:");
+            console.log("Length of html_content:", response.page_html.length);
+            console.log("Length of visible_text:", response.page_text.length);
 
             fetch(`${API_URL}/analyze`, {
                 method: 'POST',
