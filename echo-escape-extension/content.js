@@ -27,9 +27,11 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
         }
 
         // Send both the visible text and full HTML (for metadata)
+        const fullHTML = new XMLSerializer().serializeToString(document);
+
         sendResponse({
-            page_text: articleText,
-            page_html: document.documentElement.outerHTML
+            page_html: fullHTML,
+            page_text: articleText
         });
     }
 
