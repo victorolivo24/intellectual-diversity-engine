@@ -502,7 +502,6 @@ def analyze(current_user):
     html_content = request.get_json().get("html_content")
     if not html_content:
         return jsonify({"message": "HTML content is required"}), 400
-    
 
     try:
         data = request.get_json()
@@ -517,15 +516,14 @@ def analyze(current_user):
 
         url_element = soup.find("link", rel="canonical")
         url = url_element["href"] if url_element else "Unknown URL"
-
+        # Use the plain extracted text for analysis
+        text = visible_text or extract_article_text(soup)
+        
         title = (
             soup.find("title").get_text(strip=True)
             if soup.find("title")
-            else "No Title"
+            else text.split("\n")[0][:80]  # fallback to text if needed
         )
-
-        # Use the plain extracted text for analysis
-        text = visible_text or extract_article_text(soup)
 
         if not text or len(text.strip()) < 100:
             print("⚠️ No usable article text extracted.")
