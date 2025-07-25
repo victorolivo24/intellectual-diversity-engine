@@ -510,6 +510,9 @@ def analyze(current_user):
         visible_text = data.get("visible_text", "")
 
         # Parse the HTML for title and URL
+        print("----- HTML HEAD PREVIEW -----")
+        head = html_content.split("</head>")[0]
+        print(head[:500])
         soup = BeautifulSoup(html_content, "html.parser")
 
         url_element = soup.find("link", rel="canonical")
