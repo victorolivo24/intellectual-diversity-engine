@@ -50,7 +50,7 @@ CORS(
             "origins": [
                 "https://out-of-the-loop.netlify.app",
                 "https://outoftheloop.duckdns.org",
-                "chrome-extension://meagfogmfpihfoonefiokmeidplpleeb",
+                "chrome-extension://jhagopkncedpehcehocogcbaddheopln",
             ]
         }
     },
@@ -553,7 +553,6 @@ def analyze(current_user):
         }), 500
 
 
-
 @app.route("/save_analysis", methods=["POST"])
 @token_required
 def save_analysis(current_user):
@@ -945,7 +944,7 @@ def google_callback():
     # Check where the login started and redirect to the correct place
     origin = session.get("origin_state", "dashboard")
     if origin == "extension":
-        extension_id = "meagfogmfpihfoonefiokmeidplpleeb"
+        extension_id = "jhagopkncedpehcehocogcbaddheopln"
         return redirect(
             f"chrome-extension://{extension_id}/oauth_callback.html?token={app_token}&email={user.email}"
         )
