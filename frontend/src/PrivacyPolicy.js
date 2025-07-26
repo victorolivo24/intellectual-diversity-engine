@@ -7,7 +7,7 @@ export default function PrivacyPolicy() {
             <h1 style={{ ...styles.title, textAlign: 'center' }}>Privacy Policy for Out of the Loop</h1>
             <p style={{ textAlign: 'center', color: '#666' }}>Last updated: July 26, 2025</p>
 
-            <div style={{ marginTop: '30px', lineHeight: '1.6', color: '#333' }}>
+            <div style={{ marginTop: '30px', lineHeight: '1.6', color: '#f1f1f1' }}>
                 <p>Welcome to Out of the Loop. We are committed to protecting your privacy. This Privacy Policy explains what information we collect, how we use it, and your choices regarding your information.</p>
 
                 <h2 style={styles.sectionTitle}>1. Information We Collect</h2>
@@ -29,7 +29,7 @@ export default function PrivacyPolicy() {
                 <p>You have full control over your data. You can delete your account at any time from your dashboard. When you delete your account, all of your personal information and saved article history are permanently removed from our servers.</p>
 
                 <h2 style={styles.sectionTitle}>5. Contact Us</h2>
-                <p>If you have any questions about this Privacy Policy, you can contact us at [Your Email Address].</p>
+                <p>If you have any questions about this Privacy Policy, you can contact us at victormolivo3@gmail.com.</p>
             </div>
         </div>
     );
