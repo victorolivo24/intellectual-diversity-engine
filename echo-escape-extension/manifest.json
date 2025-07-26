@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Out-of-the-Loop",
+  "name": "Out of the Loop",
   "version": "1.0",
   "description": "Analyzes the sentiment and topics of the current news article.",
   "permissions": [
