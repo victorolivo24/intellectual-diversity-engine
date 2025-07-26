@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import DashboardComponent from './DashboardComponent';
 import AuthComponent from './AuthComponent';
-import AnalysisComponent from './AnalysisComponent';
 import ResetPasswordComponent from './ResetPasswordComponent';
+import PrivacyPolicy from './PrivacyPolicy';
 import styles from "./styles.js";
 
 export default function App() {
   const [auth, setAuth] = useState(null);
   const [view, setView] = useState('dashboard');
   const [dashboardKey, setDashboardKey] = useState(0);
-
+  const isPrivacyRoute = window.location.pathname === '/privacy';
   const isResetRoute = window.location.pathname.startsWith('/reset-password');
 
   
@@ -68,7 +68,13 @@ export default function App() {
   if (isResetRoute) {
     return <div style={styles.container}><ResetPasswordComponent /></div>;
   }
-
+  if (isPrivacyRoute) {
+    return (
+      <div style={styles.container}>
+        <PrivacyPolicy />
+      </div>
+    );
+  }
   if (!auth) {
     return (
       <div style={styles.container}>
