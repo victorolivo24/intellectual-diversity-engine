@@ -149,6 +149,22 @@ class User(db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+    
+    def get_reset_token(self):
+        token = secrets.token_urlsafe(32)
+        expiry = dt.datetime.utcnow() + dt.timedelta(hours=1)
+
+        reset_token = PasswordResetToken(
+            token=token,
+            user_id=self.id,
+            expires_at=expiry,
+            is_used=False
+        )
+
+        db.session.add(reset_token)
+        db.session.commit()
+
+        return token
 
 
 class Article(db.Model):
