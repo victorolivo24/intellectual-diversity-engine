@@ -840,7 +840,7 @@ def request_password_reset():
 
     try:
         send_email(
-            to=email,
+            to_email=email,
             subject="Reset your password",
             html_content=f"<p>Click the link below to reset your password:</p><a href='{reset_link}'>{reset_link}</a>",
         )
