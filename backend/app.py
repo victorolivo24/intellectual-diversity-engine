@@ -50,7 +50,7 @@ CORS(
             "origins": [
                 "https://out-of-the-loop.netlify.app",
                 "https://outoftheloop.duckdns.org",
-                "chrome-extension://jhagopkncedpehcehocogcbaddheopln",
+                "chrome-extension://meagfogmfpihfoonefiokmeidplpleeb",
             ]
         }
     },
@@ -960,7 +960,9 @@ def google_callback():
     # Check where the login started and redirect to the correct place
     origin = session.get("origin_state", "dashboard")
     if origin == "extension":
-        extension_id = "jhagopkncedpehcehocogcbaddheopln"
+        # extension_id = "jhagopkncedpehcehocogcbaddheopln"
+        extension_id = "meagfogmfpihfoonefiokmeidplpleeb"
+
         return redirect(
             f"chrome-extension://{extension_id}/oauth_callback.html?token={app_token}&email={user.email}"
         )
