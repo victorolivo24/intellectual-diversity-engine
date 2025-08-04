@@ -923,29 +923,30 @@ def login_google():
 @app.route("/auth/google/callback")
 def google_callback():
     """
-    Handles the callback from Google and redirects based on the origin encoded in 'state'.
+    Handles the callback from Google and redirects based on the origin.
+    Stateless approach: Extracts origin from the state parameter in the query string.
     """
-    state_param = request.args.get("state")
-    if not state_param or "|" not in state_param:
-        return "Invalid state parameter.", 400
+    raw_state = request.args.get("state", "")
+    try:
+        csrf_token, origin = raw_state.split("|")
+    except ValueError:
+        origin = "dashboard"  # fallback
 
-    csrf_token, origin = state_param.split("|", 1)
-
+    # Rebuild OAuth2 session without relying on session["oauth_state"]
     google = OAuth2Session(
-        app.config["GOOGLE_CLIENT_ID"], redirect_uri=app.config["GOOGLE_REDIRECT_URI"]
+        app.config["GOOGLE_CLIENT_ID"],
+        redirect_uri=app.config["GOOGLE_REDIRECT_URI"],
     )
 
-    try:
-        token = google.fetch_token(
-            "https://www.googleapis.com/oauth2/v4/token",
-            client_secret=app.config["GOOGLE_CLIENT_SECRET"],
-            authorization_response=request.url,
-        )
-    except Exception as e:
-        return f"Token exchange failed: {str(e)}", 400
+    # Exchange code for token
+    token = google.fetch_token(
+        "https://www.googleapis.com/oauth2/v4/token",
+        client_secret=app.config["GOOGLE_CLIENT_SECRET"],
+        authorization_response=request.url,
+    )
 
+    # Get user info from Google
     user_info = google.get("https://www.googleapis.com/oauth2/v1/userinfo").json()
-
     if not user_info.get("verified_email"):
         return "User email not available or not verified by Google.", 400
 
@@ -964,10 +965,10 @@ def google_callback():
     app_token = jwt.encode(
         {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
         app.config["SECRET_KEY"],
-        algorithm="HS256",
+        "HS256",
     )
 
-    # Redirect based on origin
+    # Determine redirect destination based on origin
     if origin == "extension":
         extension_id = "jhagopkncedpehcehocogcbaddheopln"
         return redirect(
