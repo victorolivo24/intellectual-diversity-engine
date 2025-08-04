@@ -895,7 +895,11 @@ def login_google():
     """
     Starts the Google OAuth flow and sets the origin directly into the 'state' param.
     """
-    origin = request.args.get("origin", "dashboard")
+    raw_state = request.args.get("state", "")
+    try:
+        _, origin = raw_state.split("|")
+    except ValueError:
+        origin = "dashboard"  # Fallback if format is unexpected
 
     # Create unique state string for CSRF + origin tracking
     unique_state = f"{uuid.uuid4()}|{origin}"
