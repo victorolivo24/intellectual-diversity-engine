@@ -926,58 +926,86 @@ def google_callback():
     Handles the callback from Google and redirects based on the origin.
     Stateless approach: Extracts origin from the state parameter in the query string.
     """
+
+    print("🔁 Google callback hit.")
     raw_state = request.args.get("state", "")
+    print(f"📥 Received state: {raw_state}")
+
     try:
         csrf_token, origin = raw_state.split("|")
+        print(f"✅ Parsed CSRF token: {csrf_token}")
+        print(f"✅ Parsed origin: {origin}")
     except ValueError:
-        origin = "dashboard"  # fallback
+        origin = "dashboard"
+        print("⚠️ Failed to parse state, defaulting to dashboard.")
 
-    # Rebuild OAuth2 session without relying on session["oauth_state"]
+    # Rebuild OAuth2Session (stateless)
     google = OAuth2Session(
         app.config["GOOGLE_CLIENT_ID"],
         redirect_uri=app.config["GOOGLE_REDIRECT_URI"],
     )
 
-    # Exchange code for token
-    token = google.fetch_token(
-        "https://www.googleapis.com/oauth2/v4/token",
-        client_secret=app.config["GOOGLE_CLIENT_SECRET"],
-        authorization_response=request.url,
-    )
+    try:
+        token = google.fetch_token(
+            "https://www.googleapis.com/oauth2/v4/token",
+            client_secret=app.config["GOOGLE_CLIENT_SECRET"],
+            authorization_response=request.url,
+        )
+        print("✅ Token fetched successfully.")
+    except Exception as e:
+        print(f"❌ Error fetching token: {e}")
+        return "Token fetch failed", 400
 
-    # Get user info from Google
-    user_info = google.get("https://www.googleapis.com/oauth2/v1/userinfo").json()
+    try:
+        user_info = google.get("https://www.googleapis.com/oauth2/v1/userinfo").json()
+        print(f"👤 User info: {user_info}")
+    except Exception as e:
+        print(f"❌ Error fetching user info: {e}")
+        return "Failed to fetch user info", 400
+
     if not user_info.get("verified_email"):
+        print("❌ Email not verified")
         return "User email not available or not verified by Google.", 400
 
     user_email = user_info["email"]
+    print(f"📧 User email: {user_email}")
 
-    # Find or create the user in our database
+    # Find or create user
     user = User.query.filter_by(email=user_email).first()
     if not user:
+        print("🆕 Creating new user...")
         new_password = secrets.token_urlsafe(16)
         user = User(email=user_email)
         user.set_password(new_password)
         db.session.add(user)
         db.session.commit()
+    else:
+        print("✅ Existing user found.")
 
-    # Issue our application's own JWT token
+    # Issue JWT
     app_token = jwt.encode(
         {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
         app.config["SECRET_KEY"],
         "HS256",
     )
+    print(f"🔐 Issued app token for user ID {user.id}")
 
-    # Determine redirect destination based on origin
+    # Final redirect
     if origin == "extension":
+        print("🔁 Redirecting to extension oauth_callback")
         extension_id = "jhagopkncedpehcehocogcbaddheopln"
-        return redirect(
-            f"chrome-extension://{extension_id}/oauth_callback.html?token={app_token}&email={user.email}"
+        redirect_url = (
+            f"chrome-extension://{extension_id}/oauth_callback.html"
+            f"?token={app_token}&email={user.email}"
         )
     else:
-        return redirect(
+        print("🔁 Redirecting to dashboard")
+        redirect_url = (
             f"https://out-of-the-loop.netlify.app?token={app_token}&email={user.email}"
         )
+
+    print(f"🚀 Final redirect URL: {redirect_url}")
+    return redirect(redirect_url)
 
 
 # Dashboard Data Endpoints
