@@ -887,34 +887,31 @@ def perform_password_reset():
     return jsonify({"message": "Password has been reset successfully."}), 200
 
 
+import uuid
+
+
 @app.route("/login/google")
-def google_login():
+def login_google():
     """
-    Redirects the user to Google's authentication page, remembering the origin.
+    Starts the Google OAuth flow and sets the origin directly into the 'state' param.
     """
-    print("Redirecting to Google with redirect_uri:", app.config["GOOGLE_REDIRECT_URI"])
+    origin = request.args.get("origin", "dashboard")
 
-    # Get the origin ('dashboard' or 'extension') from the URL
-    origin_state = request.args.get("state", "dashboard")  # Default to dashboard
+    # Create unique state string for CSRF + origin tracking
+    unique_state = f"{uuid.uuid4()}|{origin}"
 
-    scope = [
-        "https://www.googleapis.com/auth/userinfo.email",
-        "https://www.googleapis.com/auth/userinfo.profile",
-    ]
     google = OAuth2Session(
         app.config["GOOGLE_CLIENT_ID"],
-        scope=scope,
         redirect_uri=app.config["GOOGLE_REDIRECT_URI"],
-    )
-    authorization_url, state = google.authorization_url(
-        "https://accounts.google.com/o/oauth2/v2/auth",
-        access_type="offline",
-        prompt="select_account",
+        scope=["openid", "email", "profile"],
     )
 
-    # Store both the OAuth state and our origin state in the session
-    session["oauth_state"] = state
-    session["origin_state"] = origin_state
+    authorization_url, state = google.authorization_url(
+        "https://accounts.google.com/o/oauth2/auth",
+        state=unique_state,
+        access_type="offline",
+        prompt="consent",
+    )
 
     return redirect(authorization_url)
 
@@ -922,18 +919,27 @@ def google_login():
 @app.route("/auth/google/callback")
 def google_callback():
     """
-    Handles the callback from Google and redirects based on the origin.
+    Handles the callback from Google and redirects based on the origin encoded in 'state'.
     """
+    state_param = request.args.get("state")
+    if not state_param or "|" not in state_param:
+        return "Invalid state parameter.", 400
+
+    csrf_token, origin = state_param.split("|", 1)
+
     google = OAuth2Session(
-        app.config["GOOGLE_CLIENT_ID"],
-        state=session.get("oauth_state"),
-        redirect_uri=app.config["GOOGLE_REDIRECT_URI"],
+        app.config["GOOGLE_CLIENT_ID"], redirect_uri=app.config["GOOGLE_REDIRECT_URI"]
     )
-    token = google.fetch_token(
-        "https://www.googleapis.com/oauth2/v4/token",
-        client_secret=app.config["GOOGLE_CLIENT_SECRET"],
-        authorization_response=request.url,
-    )
+
+    try:
+        token = google.fetch_token(
+            "https://www.googleapis.com/oauth2/v4/token",
+            client_secret=app.config["GOOGLE_CLIENT_SECRET"],
+            authorization_response=request.url,
+        )
+    except Exception as e:
+        return f"Token exchange failed: {str(e)}", 400
+
     user_info = google.get("https://www.googleapis.com/oauth2/v1/userinfo").json()
 
     if not user_info.get("verified_email"):
@@ -954,19 +960,16 @@ def google_callback():
     app_token = jwt.encode(
         {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
         app.config["SECRET_KEY"],
-        "HS256",
+        algorithm="HS256",
     )
 
-    # Check where the login started and redirect to the correct place
-    origin = session.get("origin_state", "dashboard")
+    # Redirect based on origin
     if origin == "extension":
         extension_id = "jhagopkncedpehcehocogcbaddheopln"
-       
-
         return redirect(
             f"chrome-extension://{extension_id}/oauth_callback.html?token={app_token}&email={user.email}"
         )
-    else:  # Default to dashboard
+    else:
         return redirect(
             f"https://out-of-the-loop.netlify.app?token={app_token}&email={user.email}"
         )
