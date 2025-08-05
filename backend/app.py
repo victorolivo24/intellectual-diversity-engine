@@ -897,12 +897,15 @@ def login_google():
     `state` is expected to come from the caller as "<uuid>|<origin>".
     """
     raw_state = request.args.get("state", "")
+    print(f"📥 Received state: {raw_state}")
     try:
         _, origin = raw_state.split("|")
     except ValueError:
         origin = "dashboard"  # default if not supplied
+    print(f"🔍 Extracted origin: {origin}")
 
     csrf_token = str(uuid.uuid4())  # our own CSRF token
+    print(f"🛡️ Generated CSRF token: {csrf_token}")
     combined_state = f"{csrf_token}|{origin}"  # pass to Google
 
     google = OAuth2Session(
@@ -917,6 +920,7 @@ def login_google():
         access_type="offline",
         prompt="consent",
     )
+    print(f"🔗 Authorization URL: {authorization_url}")
     return redirect(authorization_url)
 
 @app.route("/auth/google/callback")
@@ -926,10 +930,12 @@ def google_callback():
     The `state` query param is "<csrf>|<origin>".
     """
     full_state = request.args.get("state", "")
+    print(f"📥 Received state: {full_state}")
     try:
         _, origin = full_state.split("|")
     except ValueError:
         origin = "dashboard"
+    print(f"🔍 Extracted origin: {origin}")
 
     google = OAuth2Session(
         app.config["GOOGLE_CLIENT_ID"],
@@ -942,15 +948,20 @@ def google_callback():
             client_secret=app.config["GOOGLE_CLIENT_SECRET"],
             authorization_response=request.url,
         )
+        print(f"🎟️ Token acquired: {token}")
     except Exception:
+        print("❌ Token fetch failed")
         return "Token fetch failed", 400
 
     try:
         user_info = google.get("https://www.googleapis.com/oauth2/v1/userinfo").json()
+        print(f"👤 User info: {user_info}")
     except Exception:
+        print("❌ Failed to fetch user info")
         return "Failed to fetch user info", 400
 
     if not user_info.get("verified_email"):
+        print("❌ User email not verified")
         return "User email not available or not verified by Google.", 400
 
     user_email = user_info["email"]
@@ -976,6 +987,7 @@ def google_callback():
         final_url = (
             f"https://out-of-the-loop.netlify.app?token={app_token}&email={user.email}"
         )
+    print(f"🚀 Redirecting to: {final_url}")
 
     return redirect(final_url)
 
