@@ -7,7 +7,7 @@ import requests
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request, redirect, session
+from flask import Flask, jsonify, request, redirect, session, abort
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from requests_oauthlib import OAuth2Session
@@ -902,7 +902,12 @@ def login_google():
         _, origin = raw_state.split("|")
     except ValueError:
         origin = "dashboard"  # default if not supplied
-    print(f"🔍 Extracted origin: {origin}")
+
+    allowed_origins = {"extension", "dashboard"}
+    if origin not in allowed_origins:
+        app.logger.warning("login_google: unknown origin '%s'", origin)
+        abort(400)
+
 
     csrf_token = str(uuid.uuid4())  # our own CSRF token
     print(f"🛡️ Generated CSRF token: {csrf_token}")
@@ -936,6 +941,11 @@ def google_callback():
     except ValueError:
         origin = "dashboard"
     print(f"🔍 Extracted origin: {origin}")
+
+    allowed_origins = {"extension", "dashboard"}
+    if origin not in allowed_origins:
+        app.logger.warning("google_callback: unknown origin '%s'", origin)
+        abort(400)
 
     google = OAuth2Session(
         app.config["GOOGLE_CLIENT_ID"],
