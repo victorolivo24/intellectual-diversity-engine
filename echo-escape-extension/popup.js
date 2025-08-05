@@ -1,25 +1,5 @@
-// Final popup.js
-
-
 const API_URL = 'https://outoftheloop.duckdns.org';
 const DASHBOARD_URL = 'https://out-of-the-loop.netlify.app';
-// Called by platform.js once it loads
-window.onGoogleLibraryLoad = function () {
-    // render into the div that our renderLoginForm will inject
-    gapi.signin2.render('google-signin-button', {
-        scope: 'profile email',
-        width: 240,
-        longtitle: true,
-        theme: 'light',
-        onsuccess: onGoogleSignIn
-    });
-};
-
-// Called by Google when the user signs in
-window.onGoogleSignIn = function (googleUser) {
-    const idToken = googleUser.getAuthResponse().id_token;
-    // … your existing fetch to /login/google etc …
-};
 
 // This is the main function that runs when the popup is opened
 document.addEventListener('DOMContentLoaded', function () {
@@ -128,8 +108,6 @@ function renderResults(container, analysisData) {
         handleSave(analysisData);
     });
 }
-// In popup.js
-
 function renderLoginForm(container) {
     container.innerHTML = `
         <h3>Login</h3>
@@ -175,7 +153,9 @@ function renderLoginForm(container) {
     });
     document.getElementById('google-login-button').addEventListener('click', (e) => {
         e.preventDefault();
-        chrome.tabs.create({ url: `${API_URL}/login/google?state=extension` });
+        const state = `${crypto.randomUUID()}|extension`;
+        const authUrl = `${API_URL}/login/google?state=${encodeURIComponent(state)}`;
+        chrome.tabs.create({ url: authUrl });
         container.innerHTML = `<div style="text-align: center; padding: 20px;"><p>Waiting for Google Sign-In...</p></div>`;
     });
 }
