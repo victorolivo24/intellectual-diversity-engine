@@ -903,6 +903,8 @@ def login_google():
         origin = "dashboard"  # default if not supplied
 
     csrf_token = str(uuid.uuid4())  # our own CSRF token
+    # Store the CSRF token server-side (signed cookie) for later verification
+    session["google_oauth_csrf"] = csrf_token
     combined_state = f"{csrf_token}|{origin}"  # pass to Google
 
     google = OAuth2Session(
@@ -927,9 +929,14 @@ def google_callback():
     """
     full_state = request.args.get("state", "")
     try:
-        _, origin = full_state.split("|")
+        received_token, origin = full_state.split("|")
     except ValueError:
-        origin = "dashboard"
+        return "Invalid state parameter", 400
+
+    # Compare the received token with the stored CSRF token
+    stored_token = session.pop("google_oauth_csrf", None)
+    if not stored_token or stored_token != received_token:
+        return "Invalid CSRF token", 400
 
     google = OAuth2Session(
         app.config["GOOGLE_CLIENT_ID"],
