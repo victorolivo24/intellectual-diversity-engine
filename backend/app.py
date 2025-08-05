@@ -917,13 +917,6 @@ def login_google():
         access_type="offline",
         prompt="consent",
     )
-
-    print("🔁 Google login redirect")
-    print("📥 Incoming state:", raw_state)
-    print("📥 Origin:", origin)
-    print("🧪 CSRF token sent:", csrf_token)
-    print("🚀 Authorization URL:", authorization_url)
-
     return redirect(authorization_url)
 
 @app.route("/auth/google/callback")
@@ -933,17 +926,10 @@ def google_callback():
     The `state` query param is "<csrf>|<origin>".
     """
     full_state = request.args.get("state", "")
-    print("🔁 Google callback hit")
-    print("📥 Received state:", full_state)
-
     try:
-        csrf_token, origin = full_state.split("|")
-        print("✅ Parsed CSRF token:", csrf_token)
-        print("✅ Parsed origin:", origin)
+        _, origin = full_state.split("|")
     except ValueError:
-        csrf_token = ""
         origin = "dashboard"
-        print("⚠️ Failed to parse state; defaulting to dashboard")
 
     google = OAuth2Session(
         app.config["GOOGLE_CLIENT_ID"],
@@ -956,42 +942,32 @@ def google_callback():
             client_secret=app.config["GOOGLE_CLIENT_SECRET"],
             authorization_response=request.url,
         )
-        print("✅ Token fetched successfully")
-    except Exception as e:
-        print("❌ Error fetching token:", e)
+    except Exception:
         return "Token fetch failed", 400
 
     try:
         user_info = google.get("https://www.googleapis.com/oauth2/v1/userinfo").json()
-        print("👤 User info:", user_info)
-    except Exception as e:
-        print("❌ Error fetching user info:", e)
+    except Exception:
         return "Failed to fetch user info", 400
 
     if not user_info.get("verified_email"):
-        print("❌ Email not verified")
         return "User email not available or not verified by Google.", 400
 
     user_email = user_info["email"]
-    print("📧 User email:", user_email)
 
     user = User.query.filter_by(email=user_email).first()
     if not user:
-        print("🆕 Creating new user")
         new_password = secrets.token_urlsafe(16)
         user = User(email=user_email)
         user.set_password(new_password)
         db.session.add(user)
         db.session.commit()
-    else:
-        print("✅ Existing user found")
 
     app_token = jwt.encode(
         {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
         app.config["SECRET_KEY"],
         algorithm="HS256",
     )
-    print("🔐 Issued app token for user ID", user.id)
 
     if origin == "extension":
         extension_id = "jhagopkncedpehcehocogcbaddheopln"
@@ -1000,9 +976,6 @@ def google_callback():
         final_url = (
             f"https://out-of-the-loop.netlify.app?token={app_token}&email={user.email}"
         )
-
-    print("🔁 Redirecting to", origin)
-    print("🚀 Final redirect URL:", final_url)
 
     return redirect(final_url)
 
