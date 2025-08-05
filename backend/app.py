@@ -891,126 +891,120 @@ import uuid
 
 
 @app.route("/login/google")
-def google_login():
+def login_google():
     """
-    Redirects the user to Google's authentication page.
-    Combines CSRF token and origin in the state param to persist across redirects.
+    Starts the Google OAuth flow and embeds origin + CSRF token in `state`.
+    `state` is expected to come from the caller as "<uuid>|<origin>".
     """
-    origin = request.args.get("state", "dashboard")  # 'dashboard' or 'extension'
+    raw_state = request.args.get("state", "")
+    try:
+        _, origin = raw_state.split("|")
+    except ValueError:
+        origin = "dashboard"  # default if not supplied
 
-    # Combine CSRF token and origin into one state param
-    csrf_token = str(uuid.uuid4())
-    combined_state = f"{csrf_token}|{origin}"
-
-    scope = [
-        "https://www.googleapis.com/auth/userinfo.email",
-        "https://www.googleapis.com/auth/userinfo.profile",
-    ]
+    csrf_token = str(uuid.uuid4())  # our own CSRF token
+    combined_state = f"{csrf_token}|{origin}"  # pass to Google
 
     google = OAuth2Session(
         app.config["GOOGLE_CLIENT_ID"],
-        scope=scope,
         redirect_uri=app.config["GOOGLE_REDIRECT_URI"],
+        scope=["openid", "email", "profile"],
     )
 
     authorization_url, _ = google.authorization_url(
-        "https://accounts.google.com/o/oauth2/v2/auth",
-        access_type="offline",
-        prompt="select_account",
+        "https://accounts.google.com/o/oauth2/auth",
         state=combined_state,
+        access_type="offline",
+        prompt="consent",
     )
 
-    # Save only the CSRF token part to session for validation later
-    session["oauth_state"] = csrf_token
-
-    print("🔁 Google login redirect:")
+    print("🔁 Google login redirect")
+    print("📥 Incoming state:", raw_state)
     print("📥 Origin:", origin)
-    print("🧪 CSRF token stored:", csrf_token)
-    print("🚀 Full redirect:", authorization_url)
+    print("🧪 CSRF token sent:", csrf_token)
+    print("🚀 Authorization URL:", authorization_url)
 
     return redirect(authorization_url)
-
-
-from requests_oauthlib import OAuth2Session
-from oauthlib.oauth2.rfc6749.errors import MismatchingStateError
-
 
 @app.route("/auth/google/callback")
 def google_callback():
     """
-    Handles the callback from Google, verifies CSRF, and redirects based on origin.
+    Handles the callback from Google and redirects to the correct destination.
+    The `state` query param is "<csrf>|<origin>".
     """
+    full_state = request.args.get("state", "")
+    print("🔁 Google callback hit")
+    print("📥 Received state:", full_state)
+
     try:
-        # Parse combined state
-        full_state = request.args.get("state", "")
         csrf_token, origin = full_state.split("|")
+        print("✅ Parsed CSRF token:", csrf_token)
+        print("✅ Parsed origin:", origin)
+    except ValueError:
+        csrf_token = ""
+        origin = "dashboard"
+        print("⚠️ Failed to parse state; defaulting to dashboard")
 
-        # Validate CSRF
-        expected_csrf = session.get("oauth_state")
-        if not expected_csrf or expected_csrf != csrf_token:
-            raise MismatchingStateError("CSRF Warning! State mismatch.")
+    google = OAuth2Session(
+        app.config["GOOGLE_CLIENT_ID"],
+        redirect_uri=app.config["GOOGLE_REDIRECT_URI"],
+    )
 
-        google = OAuth2Session(
-            app.config["GOOGLE_CLIENT_ID"],
-            state=full_state,
-            redirect_uri=app.config["GOOGLE_REDIRECT_URI"],
-        )
-
+    try:
         token = google.fetch_token(
             "https://www.googleapis.com/oauth2/v4/token",
             client_secret=app.config["GOOGLE_CLIENT_SECRET"],
             authorization_response=request.url,
         )
+        print("✅ Token fetched successfully")
+    except Exception as e:
+        print("❌ Error fetching token:", e)
+        return "Token fetch failed", 400
 
+    try:
         user_info = google.get("https://www.googleapis.com/oauth2/v1/userinfo").json()
+        print("👤 User info:", user_info)
+    except Exception as e:
+        print("❌ Error fetching user info:", e)
+        return "Failed to fetch user info", 400
 
-        if not user_info.get("verified_email"):
-            return "User email not available or not verified by Google.", 400
+    if not user_info.get("verified_email"):
+        print("❌ Email not verified")
+        return "User email not available or not verified by Google.", 400
 
-        user_email = user_info["email"]
+    user_email = user_info["email"]
+    print("📧 User email:", user_email)
 
-        # Find or create the user
-        user = User.query.filter_by(email=user_email).first()
-        if not user:
-            new_password = secrets.token_urlsafe(16)
-            user = User(email=user_email)
-            user.set_password(new_password)
-            db.session.add(user)
-            db.session.commit()
+    user = User.query.filter_by(email=user_email).first()
+    if not user:
+        print("🆕 Creating new user")
+        new_password = secrets.token_urlsafe(16)
+        user = User(email=user_email)
+        user.set_password(new_password)
+        db.session.add(user)
+        db.session.commit()
+    else:
+        print("✅ Existing user found")
 
-        # Issue JWT
-        app_token = jwt.encode(
-            {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
-            app.config["SECRET_KEY"],
-            algorithm="HS256",
+    app_token = jwt.encode(
+        {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
+        app.config["SECRET_KEY"],
+        algorithm="HS256",
+    )
+    print("🔐 Issued app token for user ID", user.id)
+
+    if origin == "extension":
+        extension_id = "jhagopkncedpehcehocogcbaddheopln"
+        final_url = f"chrome-extension://{extension_id}/oauth_callback.html?token={app_token}&email={user.email}"
+    else:
+        final_url = (
+            f"https://out-of-the-loop.netlify.app?token={app_token}&email={user.email}"
         )
 
-        # Redirect based on origin
-        if origin == "extension":
-            extension_id = "jhagopkncedpehcehocogcbaddheopln"
-            final_url = f"chrome-extension://{extension_id}/oauth_callback.html?token={app_token}&email={user.email}"
-        else:
-            final_url = f"https://out-of-the-loop.netlify.app?token={app_token}&email={user.email}"
+    print("🔁 Redirecting to", origin)
+    print("🚀 Final redirect URL:", final_url)
 
-        print("🔁 Google callback hit.")
-        print("📥 Received state:", full_state)
-        print("✅ Parsed CSRF token:", csrf_token)
-        print("✅ Parsed origin:", origin)
-        print("✅ Token fetched successfully.")
-        print("👤 User info:", user_info)
-        print("📧 User email:", user_email)
-        print("🔐 Issued app token for user ID", user.id)
-        print("🔁 Redirecting to", origin)
-        print("🚀 Final redirect URL:", final_url)
-
-        return redirect(final_url)
-
-    except Exception as e:
-        import traceback
-
-        print("❌ OAuth error:", e)
-        print(traceback.format_exc())
-        return "Internal Server Error. Check server logs for details.", 500
+    return redirect(final_url)
 
 
 # Dashboard Data Endpoints
