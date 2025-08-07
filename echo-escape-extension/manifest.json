@@ -5,8 +5,16 @@
   "description": "Analyze your news reading habits. See your personal media bias and escape your echo chamber with powerful AI insights.",
   "permissions": [
     "activeTab",
+    "identity",
     "storage"
   ],
+    "oauth2": {
+      "client_id": "meagfogmfpihfoonefiokmeidplpleeb",
+      "scopes": [
+        "email",
+        "profile"
+      ]
+    },
   "host_permissions": [
     "https://outoftheloop.duckdns.org/*"
   ],

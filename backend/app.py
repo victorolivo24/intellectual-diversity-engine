@@ -919,6 +919,37 @@ def login_google():
     )
     return redirect(authorization_url)
 
+
+@app.route("/auth/google/token", methods=["POST"])
+def google_token_login():
+    data = request.get_json()
+    access_token = data.get("access_token")
+
+    # Use the token to get user info
+    user_info = requests.get(
+        "https://www.googleapis.com/oauth2/v1/userinfo",
+        headers={"Authorization": f"Bearer {access_token}"},
+    ).json()
+
+    if not user_info.get("verified_email"):
+        return jsonify({"error": "Email not verified"}), 400
+
+    user_email = user_info["email"]
+    user = User.query.filter_by(email=user_email).first()
+    if not user:
+        user = User(email=user_email)
+        db.session.add(user)
+        db.session.commit()
+
+    app_token = jwt.encode(
+        {"id": user.id, "exp": dt.datetime.utcnow() + dt.timedelta(hours=24)},
+        app.config["SECRET_KEY"],
+        "HS256",
+    )
+
+    return jsonify({"token": app_token, "email": user_email})
+
+
 @app.route("/auth/google/callback")
 def google_callback():
     """
