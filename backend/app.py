@@ -50,7 +50,7 @@ CORS(
             "origins": [
                 "https://out-of-the-loop.netlify.app",
                 "https://outoftheloop.duckdns.org",
-                "chrome-extension://jhagopkncedpehcehocogcbaddheopln",
+                "chrome-extension://meagfogmfpihfoonefiokmeidplpleeb",
             ]
         }
     },
