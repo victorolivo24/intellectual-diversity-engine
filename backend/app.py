@@ -1023,7 +1023,7 @@ def google_callback():
     )
 
     if origin == "extension":
-        extension_id = "meagfogmfpihfoonefiokmeidplpleeb"
+        extension_id = "jhagopkncedpehcehocogcbaddheopln"
         final_url = f"chrome-extension://{extension_id}/oauth_callback.html?token={app_token}&email={user.email}"
     else:
         final_url = (
