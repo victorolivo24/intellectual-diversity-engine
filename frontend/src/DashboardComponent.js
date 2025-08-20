@@ -280,51 +280,54 @@ export default function DashboardComponent({ auth, setAuth, key }) {
                 {expandedCategory === item.category && (
                   <tr>
                     <td colSpan="4" style={{
-                      padding: '15px',
+                      padding: '0', // We remove padding from the cell itself
                       background: '#1f1f1f',
                       color: '#f1f1f1'
                     }}>
-                      {state.articles.filter(a => a.category === item.category).map(article => (
-                        <div
-                          key={article.id}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            padding: '8px 0',
-                            borderBottom: '1px solid #333'
-                          }}>
-                          <span
-                            title={article.title}
+                      {/* 1. WRAP YOUR .map() IN A NEW DIV WITH THE NEW STYLE */}
+                      <div style={styles.expandedArticlesContainer}>
+                        {state.articles.filter(a => a.category === item.category).map(article => (
+                          <div
+                            key={article.id}
                             style={{
-                              flex: '1',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              marginRight: '15px',
-                              color: '#f1f1f1'
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              padding: '8px 0',
+                              borderBottom: '1px solid #333'
                             }}>
-                            {article.title} (<span style={{
-                              color: article.sentiment > 0.05 ? '#28a745' :
-                                article.sentiment < -0.05 ? '#dc3545' : '#f1f1f1'
-                            }}>Score: {article.sentiment.toFixed(2)}</span>)
-                          </span>
-                          <select
-                            value={article.category}
-                            onChange={e => handleMoveArticle(article.id, e.target.value)}
-                            style={{
-                              padding: '5px',
-                              borderRadius: '4px',
-                              border: '1px solid #444',
-                              background: '#222',
-                              color: '#f1f1f1'
-                            }}>
-                            {allCategories.map(cat => (
-                              <option key={cat} value={cat}>{cat}</option>
-                            ))}
-                          </select>
-                        </div>
-                      ))}
+
+                            {/* Your article title span remains the same */}
+                            <span
+                              title={article.title}
+                              style={{
+                                flex: '1',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                marginRight: '15px',
+                                color: '#f1f1f1'
+                              }}>
+                              {article.title} (<span style={{
+                                color: article.sentiment > 0.05 ? '#28a745' :
+                                  article.sentiment < -0.05 ? '#dc3545' : '#f1f1f1'
+                              }}>Score: {article.sentiment.toFixed(2)}</span>)
+                            </span>
+
+                            {/* 2. APPLY THE NEW STYLE TO YOUR SELECT ELEMENT */}
+                            <select
+                              value={article.category}
+                              onChange={e => handleMoveArticle(article.id, e.target.value)}
+                              style={styles.categorySelect} // Use the new style here
+                            >
+                              {allCategories.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))}
+                            </select>
+
+                          </div>
+                        ))}
+                      </div>
                     </td>
                   </tr>
                 )}

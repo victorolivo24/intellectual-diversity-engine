@@ -100,6 +100,23 @@ const styles = {
     padding: '8px',
     fontSize: '12px',
     verticalAlign: 'middle'
+  },
+  expandedArticlesContainer: {
+    maxHeight: '220px',    // This limits how tall the list can get
+    overflowY: 'auto',     // This adds a scrollbar ONLY if the list is too long
+    padding: '10px',
+    borderTop: '1px solid #333'
+  },
+
+  // (Optional but recommended) Add a style for the dropdown to keep it neat
+  categorySelect: {
+    padding: '5px',
+    borderRadius: '4px',
+    border: '1px solid #444',
+    background: '#222',
+    color: '#f1f1f1',
+    minWidth: '150px' // Prevents the dropdown from being too wide
   }
 };
+
 export default styles;
