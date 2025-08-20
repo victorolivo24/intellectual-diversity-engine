@@ -51,6 +51,7 @@ CORS(
                 "https://out-of-the-loop.netlify.app",
                 "https://outoftheloop.duckdns.org",
                 "chrome-extension://meagfogmfpihfoonefiokmeidplpleeb",
+                "chrome-extension://jhagopkncedpehcehocogcbaddheopln",
             ]
         }
     },

@@ -108,67 +108,49 @@ function renderResults(container, analysisData) {
         handleSave(analysisData);
     });
 }
-function signInWithGoogle() {
-    const redirectUri = chrome.identity.getRedirectURL();
-    const clientId = 'meagfogmfpihfoonefiokmeidplpleeb';
-    const scope = 'profile email openid';
-
-    const authUrl =
-        `https://accounts.google.com/o/oauth2/auth?` +
-        `client_id=${clientId}` +
-        `&response_type=token` +
-        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-        `&scope=${encodeURIComponent(scope)}`;
-
-    chrome.identity.launchWebAuthFlow(
-        {
-            url: authUrl,
-            interactive: true,
-        },
-        function (redirectUrl) {
-            if (chrome.runtime.lastError || !redirectUrl) {
-                console.error("Google Sign-In failed:", chrome.runtime.lastError);
-                return;
-            }
-
-            const params = new URLSearchParams(new URL(redirectUrl).hash.substring(1));
-            const accessToken = params.get("access_token");
-
-            if (!accessToken) {
-                console.error("No access token found in redirect.");
-                return;
-            }
-
-            console.log("✅ Got Google access token:", accessToken);
-
-            // OPTIONAL: You can send this access token to your backend to issue a JWT for your app
-            fetch(`${API_URL}/auth/google/token`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ access_token: accessToken }),
-            })
-                .then((res) => res.json())
-                .then((data) => {
-                    if (data.token && data.email) {
-                        chrome.storage.sync.set(
-                            { token: data.token, email: data.email },
-                            () => {
-                                console.log("✅ Logged in as", data.email);
-                                chrome.runtime.sendMessage({ action: "login_success" });
-                                window.close();
-                            }
-                        );
-                    } else {
-                        console.error("❌ Backend response missing token/email:", data);
-                    }
-                })
-                .catch((err) => {
-                    console.error("Error sending token to backend:", err);
-                });
+function signInWithGoogle(container) {
+    // This function uses the 'oauth2' configuration from your manifest.json
+    chrome.identity.getAuthToken({ interactive: true }, function (googleAccessToken) {
+        if (chrome.runtime.lastError || !googleAccessToken) {
+            console.error("Could not get Google access token:", chrome.runtime.lastError.message);
+            // Optionally render an error message in the popup
+            document.body.innerHTML = `<p>Error: ${chrome.runtime.lastError.message}</p>`;
+            return;
         }
-    );
+
+        console.log("✅ Got Google access token:", googleAccessToken);
+
+        // Now, send this token to your backend to exchange it for your app's JWT
+
+        fetch(`${API_URL}/auth/google/token`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ access_token: googleAccessToken }),
+        })
+            .then((res) => {
+                if (!res.ok) {
+                    throw new Error(`Backend returned status ${res.status}`);
+                }
+                return res.json();
+            })
+            .then((data) => {
+                if (data.token && data.email) {
+                    // Save your application's token (JWT) and user email
+                    chrome.storage.sync.set({ token: data.token, email: data.email }, () => {
+                        console.log("✅ Successfully logged in as", data.email);
+                        renderAnalysisView(container, data.email);
+
+                        chrome.runtime.sendMessage({ action: "login_success" });
+                    });
+                } else {
+                    container.innerHTML = `<p style="color: red;">Login failed. Please try again.</p>`;
+                    console.error("❌ Backend response missing token/email:", data);
+                }
+            })
+            .catch((err) => {
+                console.error("Error sending token to backend:", err);
+            });
+    });
 }
 
 function renderLoginForm(container) {
@@ -216,9 +198,16 @@ function renderLoginForm(container) {
     });
     document.getElementById('google-login-button').addEventListener('click', (e) => {
         e.preventDefault();
+
+        // This line is the one we need to verify
+        const container = document.getElementById('root-container');
+
+        // If 'container' is null here, the next line will crash
         container.innerHTML = `<div style="text-align: center; padding: 20px;"><p>Waiting for Google Sign-In...</p></div>`;
-        signInWithGoogle();  
+
+        signInWithGoogle(container);
     });
+
 
 }
 
@@ -268,7 +257,7 @@ function renderAnalysisView(container, email) {
         e.preventDefault();
         handleLogout(container);
     });
-   
+
 
     document.getElementById('dashboard-link').addEventListener('click', (e) => {
         e.preventDefault();
@@ -393,7 +382,7 @@ function handleAnalysis() {
                 headers: { 'Content-Type': 'application/json', 'x-access-token': result.token },
                 body: JSON.stringify({
                     html_content: response.page_html,
-                    visible_text: response.page_text  
+                    visible_text: response.page_text
                 })
 
             })
