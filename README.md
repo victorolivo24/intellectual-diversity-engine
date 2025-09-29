@@ -2,8 +2,6 @@
 
 A full-stack platform to help you analyze your news consumption and break free from your personal "You-loop."
 
-> **Note:** This is a placeholder. It's highly recommended to replace this with a real screenshot of your project dashboard.
-
 ---
 
 ## 📖 About The Project
