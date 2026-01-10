@@ -985,14 +985,14 @@ def google_callback():
     )
 
     try:
+        authorization_response = request.url.replace("http://", "https://", 1)
         token = google.fetch_token(
             "https://www.googleapis.com/oauth2/v4/token",
             client_secret=app.config["GOOGLE_CLIENT_SECRET"],
-            authorization_response=request.url,
+            authorization_response=authorization_response,
         )
         print(f"🎟️ Token acquired: {token}")
-    except Exception:
-        print("❌ Token fetch failed")
+    except Exception as e:
         return "Token fetch failed", 400
 
     try:
