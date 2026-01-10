@@ -42,14 +42,14 @@ import traceback
 # initialize Flask app with database
 load_dotenv()
 app = Flask(__name__)
+frontend_url = (os.getenv("FRONTEND_URL") or "https://out-of-the-loop.netlify.app").strip()
 # CHANGE ONCE EXTENSION IS ON GOOGLE STORE
 CORS(
     app,
     resources={
         r"/*": {
             "origins": [
-                "https://out-of-the-loop.netlify.app",
-                "https://outoftheloop.duckdns.org",
+                frontend_url,
                 "chrome-extension://meagfogmfpihfoonefiokmeidplpleeb",
                 "chrome-extension://jhagopkncedpehcehocogcbaddheopln",
             ]
@@ -837,7 +837,7 @@ def request_password_reset():
         print(f"Error generating reset token: {e}")
         return jsonify({"error": "Failed to generate reset token"}), 500
 
-    reset_link = f"https://out-of-the-loop.netlify.app/reset-password/{token}"
+    reset_link = f"{frontend_url}/reset-password/{token}"
 
     try:
         send_email(
@@ -1026,9 +1026,7 @@ def google_callback():
         extension_id = "jhagopkncedpehcehocogcbaddheopln"
         final_url = f"chrome-extension://{extension_id}/oauth_callback.html?token={app_token}&email={user.email}"
     else:
-        final_url = (
-            f"https://out-of-the-loop.netlify.app?token={app_token}&email={user.email}"
-        )
+        final_url = f"{frontend_url}?token={app_token}&email={user.email}"
     print(f"🚀 Redirecting to: {final_url}")
 
     return redirect(final_url)
