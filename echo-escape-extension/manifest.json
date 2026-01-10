@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Out of the Loop",
-  "version": "1.1",
+  "version": "1.2",
   "description": "Analyze your news reading habits. See your personal media bias and escape your echo chamber with powerful AI insights.",
   "permissions": [
     "activeTab",
@@ -9,7 +9,7 @@
     "storage"
   ],
   "host_permissions": [
-    "https://outoftheloop.duckdns.org/*"
+    "https://victoro24-echo-escape-api.hf.space/*"
   ],
   "oauth2": {
     "client_id": "30077394914-d5fsp8b59dkgeojp4sm2uktub9ic5sr7.apps.googleusercontent.com",

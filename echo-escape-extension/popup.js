@@ -1,4 +1,4 @@
-const API_URL = 'https://outoftheloop.duckdns.org';
+const API_URL = 'https://victoro24-echo-escape-api.hf.space';
 const DASHBOARD_URL = 'https://out-of-the-loop.netlify.app';
 
 // This is the main function that runs when the popup is opened
