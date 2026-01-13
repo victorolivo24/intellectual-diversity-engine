@@ -948,6 +948,7 @@ def google_token_login():
     user = User.query.filter_by(email=user_email).first()
     if not user:
         user = User(email=user_email)
+        user.set_password(secrets.token_urlsafe(16))
         db.session.add(user)
         db.session.commit()
 
