@@ -35,9 +35,9 @@ import sentry_sdk
 from sentry_sdk.integrations.flask import FlaskIntegration
 from config import config_by_name
 from flask_migrate import Migrate
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
 import traceback
+import base64
+from email.mime.text import MIMEText
 
 # initialize Flask app with database
 load_dotenv()
@@ -63,6 +63,12 @@ nltk.data.path.append(NLTK_DATA_DIR)
 config_name = os.getenv("FLASK_ENV", "dev")
 # Load the configuration object from the config.py file
 app.config.from_object(config_by_name[config_name])
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
+    "pool_size": 5,
+    "max_overflow": 10,
+}
 
 if app.config["SENTRY_DSN"]:
     sentry_sdk.init(
@@ -803,20 +809,65 @@ def refresh_token():
     return jsonify({"token": token})
 
 
-def send_email(to_email, subject, html_content):
-    message = Mail(
-        from_email=os.environ.get("FROM_EMAIL"),
-        to_emails=to_email,
-        subject=subject,
-        html_content=html_content,
-    )
+def send_reset_email(user_email, token):
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
+    refresh_token = os.environ.get("GOOGLE_REFRESH_TOKEN")
+    sender_email = os.environ.get("FROM_EMAIL", "outoftheloop.company@gmail.com")
+
+    if not client_id or not client_secret or not refresh_token or not sender_email:
+        raise RuntimeError(
+            "GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, and FROM_EMAIL must be set."
+        )
+
+    token_url = "https://oauth2.googleapis.com/token"
+    token_data = {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token",
+    }
 
     try:
-        sg = SendGridAPIClient(os.environ.get("SENDGRID_API_KEY"))
-        response = sg.send(message)
-        print(f"Email sent to {to_email} - Status: {response.status_code}")
+        token_response = requests.post(token_url, data=token_data, timeout=15)
+        if token_response.status_code != 200:
+            print(
+                f"Mail Error: token exchange failed {token_response.status_code} {token_response.text}"
+            )
+            return False
+        access_token = token_response.json().get("access_token")
+        if not access_token:
+            print(f"Mail Error: missing access_token {token_response.text}")
+            return False
+
+        reset_url = f"{frontend_url}/reset-password/{token}"
+        message = MIMEText(
+            f"<p>Click the link below to reset your password:</p>"
+            f"<a href='{reset_url}'>{reset_url}</a>",
+            "html",
+        )
+        message["to"] = user_email
+        message["from"] = f"Echo Escape Support <{sender_email}>"
+        message["subject"] = "Reset Your Password"
+
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        send_url = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        }
+        send_response = requests.post(
+            send_url, json={"raw": raw_message}, headers=headers, timeout=15
+        )
+        if send_response.status_code not in (200, 202):
+            print(
+                f"Mail Error: send failed {send_response.status_code} {send_response.text}"
+            )
+            return False
+        return True
     except Exception as e:
-        print(f"Error sending email: {e}")
+        print(f"Mail Error: {e!r}")
+        return False
 
 
 @app.route("/request-password-reset", methods=["POST"])
@@ -827,29 +878,23 @@ def request_password_reset():
     if not email:
         return jsonify({"error": "Email is required"}), 400
 
+    print(f"Password reset requested for: {email}")
     user = User.query.filter_by(email=email).first()
     if not user:
-        return jsonify({"message": "No user found with that email"}), 404
+        print("Password reset: user not found")
+    if user:
+        try:
+            token = user.get_reset_token()
+            print("Password reset: token created, sending email")
+            send_reset_email(email, token)
+            print("Password reset: send_email completed")
+        except Exception as e:
+            print(f"Error sending reset email: {e!r}")
 
-    try:
-        token = user.get_reset_token()
-    except Exception as e:
-        print(f"Error generating reset token: {e}")
-        return jsonify({"error": "Failed to generate reset token"}), 500
-
-    reset_link = f"{frontend_url}/reset-password/{token}"
-
-    try:
-        send_email(
-            to_email=email,
-            subject="Reset your password",
-            html_content=f"<p>Click the link below to reset your password:</p><a href='{reset_link}'>{reset_link}</a>",
-        )
-    except Exception as e:
-        print(f"Error sending reset email: {e}")
-        return jsonify({"error": "Failed to send reset email"}), 500
-
-    return jsonify({"message": "Password reset link sent"}), 200
+    return (
+        jsonify({"message": "If that email exists, a reset link has been sent."}),
+        200,
+    )
 
 
 @app.route("/perform-password-reset", methods=["POST"])
