@@ -847,7 +847,7 @@ def send_reset_email(user_email, token):
             "html",
         )
         message["to"] = user_email
-        message["from"] = f"Echo Escape Support <{sender_email}>"
+        message["from"] = f"Out Of The Loop Support <{sender_email}>"
         message["subject"] = "Reset Your Password"
 
         raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
